@@ -10,7 +10,7 @@ from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 import google.generativeai as genai
 from datetime import datetime
-import psycopg2
+
 # --- إعداد السجلات ---
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -170,33 +170,6 @@ def manual_fallback_check(clean_text):
     has_route = "من " in clean_text and ("الى" in clean_text or "لي" in clean_text)
     return (has_order and has_service) or has_route
 
-
-
-
-def get_all_driver_ids():
-    conn = None
-    driver_ids = []
-    try:
-        # تأكد من وضع رابط الاتصال الخاص بك في متغيرات البيئة
-        DATABASE_URL = os.environ.get("DATABASE_URL") 
-        conn = psycopg2.connect(DATABASE_URL)
-        cur = conn.cursor()
-        
-        # جلب جميع المعرفات من جدول المستخدمين
-        # سنفترض أن اسم الجدول users وعمود المعرف هو user_id
-        cur.execute("SELECT user_id FROM users;")
-        
-        rows = cur.fetchall()
-        driver_ids = [row[0] for row in rows]
-        
-        cur.close()
-    except Exception as e:
-        print(f"❌ خطأ في الاتصال بقاعدة البيانات: {e}")
-    finally:
-        if conn is not None:
-            conn.close()
-    return driver_ids
-
 # ---------------------------------------------------------
 # 3. [تعديل 2] دالة الإرسال للمستخدمين المحددين
 # ---------------------------------------------------------
@@ -204,50 +177,61 @@ async def notify_users(detected_district, original_msg):
     content = original_msg.text or original_msg.caption
     if not content: return
 
-    customer = original_msg.from_user
-    customer_id = customer.id if customer else 0
-    bot_username = "Mishweribot" 
+    try:
+        customer = original_msg.from_user
 
-    # رابط التحقق (الوسيط)
-    verify_url = f"https://t.me/{bot_username}?start=verify_{customer_id}"
-    buttons = [[InlineKeyboardButton("💬 مراسلة العميل", url=verify_url)]]
-    keyboard = InlineKeyboardMarkup(buttons)
+        # 1. رابط حساب العميل المباشر
+        # إذا كان لدى العميل "username" نستخدمه، وإلا نستخدم "id" (رابط دائم)
+        if customer and customer.username:
+            direct_contact_url = f"https://t.me/{customer.username}"
+        elif customer:
+            direct_contact_url = f"tg://user?id={customer.id}"
+        else:
+            direct_contact_url = None # لا يمكن المراسلة إذا كان مخفياً
 
-    alert_text = (
-        f"🎯 <b>طلب جديد في {detected_district}</b>\n\n"
-        f"📝 <b>الطلب:</b>\n<i>{content}</i>\n\n"
-        f"⏰ {datetime.now().strftime('%H:%M:%S')}"
-    )
-
-    # جلب القائمة من PostgreSQL (تشغيل الدالة العادية في thread لتجنب تعطيل asyncio)
-    ALL_DRIVERS = await asyncio.to_thread(get_all_driver_ids)
-    
-    if not ALL_DRIVERS:
-        print("⚠️ لم يتم العثور على سائقين في قاعدة البيانات.")
-        return
-
-    # دالة الإرسال الفردي
-    async def send_to_driver(driver_id):
-        try:
-            await bot_sender.send_message(
-                chat_id=driver_id,
-                text=alert_text,
-                reply_markup=keyboard,
-                parse_mode=ParseMode.HTML
-            )
-        except Exception:
-            pass # لتجاوز من قاموا بحظر البوت
-
-    # الإرسال بنظام الدفعات (Batching) لتجنب حظر تليجرام
-    batch_size = 25 # إرسال لـ 25 سائق في كل دفعة
-    for i in range(0, len(ALL_DRIVERS), batch_size):
-        batch = ALL_DRIVERS[i:i+batch_size]
-        tasks = [send_to_driver(uid) for uid in batch]
+        # 2. رابط مصدر الرسالة في الجروب
+        # ملاحظة: الروابط المباشرة للجروبات الخاصة تتطلب أن يكون المستخدم منضماً للجروب
         
-        await asyncio.gather(*tasks) # إرسال الدفعة الحالية متوازياً
-        await asyncio.sleep(1.0) # انتظار ثانية كاملة قبل الدفعة التالية لحماية البوت
+        # 3. تجهيز الأزرار
+                # اسم يوزر البوت الخاص بك (بدون @)
+        bot_username = "Mishweribot" 
+        
+        # إنشاء رابط وسيط يحتوي على آيدي العميل
+        gateway_url = f"https://t.me/{bot_username}?start=chat_{customer.id}"
 
-    print(f"✅ تم الإرسال لـ {len(ALL_DRIVERS)} سائق من قاعدة البيانات بنجاح.")
+        buttons_list = [
+            [InlineKeyboardButton("💬 مراسلة العميل (عبر البوت)", url=gateway_url)],
+        ]
+
+        # زر المصدر
+       
+
+        keyboard = InlineKeyboardMarkup(buttons_list)
+
+        alert_text = (
+            f"🎯 <b>طلب جديد تم التقاطه!</b>\n\n"
+            f"📍 <b>المنطقة:</b> {detected_district}\n"
+            f"👤 <b>اسم العميل:</b> {customer.first_name if customer else 'مخفي'}\n"
+            f"📝 <b>نص الطلب:</b>\n<i>{content}</i>\n\n"
+            f"⏰ <b>الوقت:</b> {datetime.now().strftime('%H:%M:%S')}"
+        )
+
+        # 4. التكرار لإرسال الرسالة لكل شخص في القائمة TARGET_USERS
+        for user_id in TARGET_USERS:
+            try:
+                await bot_sender.send_message(
+                    chat_id=user_id,
+                    text=alert_text,
+                    reply_markup=keyboard,
+                    parse_mode=ParseMode.HTML
+                )
+            except Exception as e_user:
+                print(f"⚠️ فشل الإرسال للمستخدم {user_id}: {e_user}")
+
+        print(f"✅ تم توزيع الطلب ({detected_district}) للمشتركين.")
+
+    except Exception as e:
+        print(f"❌ خطأ عام في دالة الإرسال: {e}")
 
 async def notify_channel(detected_district, original_msg):
     content = original_msg.text or original_msg.caption
@@ -255,24 +239,18 @@ async def notify_channel(detected_district, original_msg):
 
     try:
         customer = original_msg.from_user
-        # استخراج المعرفات اللازمة
         customer_id = customer.id if customer else 0
-        msg_id = getattr(original_msg, "id", getattr(original_msg, "message_id", 0))
-        chat_id_str = str(original_msg.chat.id).replace("-100", "")
+        
+        # --- الإعدادات ---
+        bot_username = "Mishweriibot" 
 
-        # --- الإعدادات (تأكد من مطابقة يوزر البوت) ---
-        # استبدل 'YourBotUsername' بيوزر بوتك بدون علامة @
-        bot_username = "Mishwariibot" 
-
-        # تجهيز الروابط العميقة (Deep Links)
-        # الرابط الأول لمراسلة العميل
-        gate_contact = f"https://t.me/{bot_username}?start=contact_{customer_id}"
-        # الرابط الثاني لمصدر الطلب في الجروب
-        gate_source = f"https://t.me/{bot_username}?start=source_{chat_id_str}_{msg_id}"
+        # ✅ توحيد الرابط ليستخدم "chat_" ليتوافق مع معالج start_command
+        gate_contact = f"https://t.me/{bot_username}?start=chat_{customer_id}"
 
         buttons = [
+            # هذا الزر الآن يوجه لنفس المعالج الذي يفحص الاشتراك
             [InlineKeyboardButton("💬 مراسلة العميل (للمشتركين)", url=gate_contact)],
-            [InlineKeyboardButton("💳 للاشتراك وتفعيل الحساب", url="https://t.me/x3FreTx")]
+            [InlineKeyboardButton("💳 للاشتراك وتفعيل الحساب", url="https://t.me/servecest")]
         ]
 
         keyboard = InlineKeyboardMarkup(buttons)
@@ -281,8 +259,8 @@ async def notify_channel(detected_district, original_msg):
             f"🎯 <b>طلب مشوار جديد</b>\n\n"
             f"📍 <b>المنطقة:</b> {detected_district}\n"
             f"📝 <b>التفاصيل:</b>\n<i>{content}</i>\n\n"
-            f"⏰ <b>الوقت:</b> {datetime.now().strftime('%H:%M:%S')}\n"
-            f"⚠️ <i>الروابط أعلاه تفتح للمشتركين فقط.</i>"
+            f"⏰ <b>الوقت:</b> {datetime.now().strftime('%H:%M:%S')}\n\n"
+            f"⚠️ <i>الزر أعلاه يفتح للمشتركين فقط.</i>"
         )
 
         await bot_sender.send_message(
@@ -291,63 +269,76 @@ async def notify_channel(detected_district, original_msg):
             reply_markup=keyboard,
             parse_mode=ParseMode.HTML
         )
-        print(f"✅ تم الإرسال للقناة بروابط مشفرة: {detected_district}")
+        print(f"✅ تم الإرسال للقناة برابط موحد (chat_): {detected_district}")
 
     except Exception as e:
         print(f"❌ خطأ إرسال للقناة: {e}")
-
-
 # ---------------------------------------------------------
 # 4. الرادار الرئيسي
 # ---------------------------------------------------------
 async def start_radar():
     await user_app.start()
-    print("🚀 الرادار يعمل بنظام الفحص الهادئ لتجنب الـ Flood...")
-    
+    print("🚀 الرادار يعمل ويرسل للمستخدمين المحددين...")
+
+    # [هام] قم بإرسال رسالة تجريبية لنفسك عند التشغيل للتأكد
+    # يمكنك إزالة هذا السطر لاحقاً
+    if TARGET_USERS:
+        try:
+            await bot_sender.send_message(TARGET_USERS[0], "✅ تم تشغيل البوت بنجاح")
+        except: pass
+
     last_processed = {}
 
     while True:
         try:
-            # 1. زيادة وقت الانتظار الكلي بين الدورات (تجنب الإرهاق)
-            await asyncio.sleep(15) 
+            await asyncio.sleep(5) 
 
-            # 2. تقليل عدد الحوارات التي يتم فحصها (التركيز على الأهم)
-            async for dialog in user_app.get_dialogs(limit=25): 
-                if str(dialog.chat.type).upper() not in ["GROUP", "SUPERGROUP"]: 
+            async for dialog in user_app.get_dialogs(limit=50):
+                # تأكد من أن الحوار هو "مجموعة" أو "سوبر جروب"
+                dialog_type = str(dialog.chat.type).upper()
+                if "GROUP" not in dialog_type and "SUPERGROUP" not in dialog_type: 
                     continue
-                
+
                 chat_id = dialog.chat.id
 
-                # 3. محاولة جلب آخر رسالة فقط
+                # جلب آخر رسالة
                 try:
                     async for msg in user_app.get_chat_history(chat_id, limit=1):
+                        # تخطي الرسائل القديمة أو المعالجة مسبقاً
                         if chat_id in last_processed and msg.id <= last_processed[chat_id]:
                             continue
 
                         last_processed[chat_id] = msg.id
+
                         text = msg.text or msg.caption
+                        # تجاهل رسائل البوت نفسه أو الرسائل الفارغة
                         if not text or (msg.from_user and msg.from_user.is_self): continue
 
-                        found_district = analyze_message_by_districts(text)
-                        if found_district:
-                            await notify_users(found_district, msg)
-                            await notify_channel(found_district, msg)
-                            print(f"✅ تم التقاط طلب في حي: {found_district}")
-                    
-                    # 4. إضافة تأخير بسيط (نصف ثانية) بين كل مجموعة وأخرى داخل الدورة
-                    await asyncio.sleep(0.5)
+                        # التحليل
+                        is_valid_order = await analyze_message_hybrid(text)
 
-                except Exception as e_history:
-                    if "FloodWait" in str(e_history):
-                        # إذا واجهنا طلب انتظار، ننام للمدة المطلوبة
-                        wait_time = int(re.findall(r'\d+', str(e_history))[0])
-                        print(f"⚠️ طلب انتظار من تليجرام لمدة {wait_time} ثانية...")
-                        await asyncio.sleep(wait_time)
+                        if is_valid_order:
+                            # استخراج الحي (اختياري)
+                            found_d = "عام"
+                            text_c = normalize_text(text)
+                            for city, districts in CITIES_DISTRICTS.items():
+                                for d in districts:
+                                    if normalize_text(d) in text_c:
+                                        found_d = d
+                                        break
+
+                            # [تعديل 3] استدعاء دالة الإرسال للمستخدمين
+                                       # ✅ [التعديل المطلوب] استدعاء الدالتين معاً
+                            await notify_users(found_d, msg)   # الإرسال للأشخاص في الخاص
+                            await notify_channel(found_d, msg) # الإرسال للقناة العامة
+
+                except Exception as e_chat:
+                    # أحياناً يحدث خطأ في قراءة مجموعة معينة، نتجاوزها
                     continue
 
         except Exception as e:
-            print(f"⚠️ خطأ في الدورة: {e}")
-            await asyncio.sleep(10)
+            print(f"⚠️ خطأ في الدورة الرئيسية: {e}")
+            await asyncio.sleep(5)
 
 # --- خادم الويب (Health Check) ---
 class HealthCheckHandler(BaseHTTPRequestHandler):
