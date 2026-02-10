@@ -3,9 +3,7 @@ import threading
 import sys
 import os
 import logging
-import re
-import psycopg2 
-import psycopg2.pool  
+import re   
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pyrogram import Client, filters 
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
@@ -325,47 +323,68 @@ async def message_handler(client, msg):
     except Exception as e:
         logging.error(f"⚠️ خطأ في معالجة الرسالة: {e}")
 
+
+# --- [تطوير] معالج الرسائل الذكي ---
+@user_app.on_message(filters.text & filters.group)
+async def message_handler(client, msg):
+    try:
+        text = msg.text or msg.caption
+        if not text or len(text) < 5:
+            return
+
+        # 1. التحليل الهجين (فلاتر + ذكاء اصطناعي)
+        is_valid_order = await analyze_message_hybrid(text)
+
+        if is_valid_order:
+            # محاولة تحديد المنطقة من النص
+            found_d = "جدة - عام"
+            text_c = normalize_text(text)
+            for city, districts in CITIES_DISTRICTS.items():
+                for d in districts:
+                    if normalize_text(d) in text_c:
+                        found_d = d
+                        break
+
+            # 2. إرسال الإشعارات (استخدام asyncio.gather للسرعة)
+            await asyncio.gather(
+                notify_users(found_d, msg),
+                notify_channel(found_d, msg)
+            )
+            logging.info(f"✅ تم تحويل طلب من: {msg.chat.title if msg.chat else 'Unknown'}")
+
+    except Exception as e:
+        logging.error(f"⚠️ خطأ في معالجة الرسالة: {e}")
+
 # --- [تطوير] دالة التشغيل الرئيسية الموفرة للطاقة ---
 # تأكد من استيراد ChatType في بداية الملف إذا لم يكن موجوداً
 
 async def start_radar():
     print("🚀 بدء تشغيل الرادار...")
-    
     try:
         # 1. تشغيل العميل
         await user_app.start()
         print("✅ تم اتصال اليوزر بوت بنجاح")
 
-        # 2. 🔄 القراءة التلقائية للمجموعات (Auto-Discovery)
-        # هذا الجزء يحل مشكلة Peer id invalid لجميع المجموعات دفعة واحدة
-        print("⏳ جاري تحميل قائمة المجموعات وتحديث الكاش...")
-        
+        # 2. 🔄 القراءة التلقائية للمجموعات (تحديث الكاش)
+        print("⏳ جاري تحديث قائمة المجموعات...")
         group_count = 0
         async for dialog in user_app.get_dialogs():
-            # نتحقق إذا كانت المحادثة مجموعة أو سوبر جروب
             if dialog.chat.type in [ChatType.GROUP, ChatType.SUPERGROUP]:
-                # مجرد المرور على المحادثة هنا يقوم بتخزين بياناتها في الكاش
                 group_count += 1
-                # طباعة اختيارية لمتابعة التحميل (يمكنك إلغاء السطر التالي لتقليل النصوص)
-                # print(f"🔹 تم التعرف على: {dialog.chat.title} ({dialog.chat.id})")
-
-        print(f"✅ تم الانتهاء! الرادار جاهز ويراقب {group_count} مجموعة الآن.")
         
-        # إرسال رسالة تنبيه لنفسك (اختياري)
-        if TARGET_USERS:
-            try: 
-                await bot_sender.send_message(TARGET_USERS[0], f"✅ الرادار يعمل ويراقب {group_count} مجموعة")
-            except: pass
+        print(f"✅ الرادار يراقب الآن {group_count} مجموعة.")
 
-        # 3. الحفاظ على البوت يعمل (Loop)
-        while True:
-            await asyncio.sleep(3600) # نوم طويل لتقليل استهلاك المعالج
+        # 3. 🟢 تفعيل وضع الانتظار المستمر (Idle)
+        # هذا السطر ضروري جداً لكي يعمل @user_app.on_message
+        from pyrogram.methods.utilities.idle import idle
+        await idle()
 
     except Exception as e:
-        print(f"❌ خطأ غير متوقع في الرادار: {e}")
+        print(f"❌ خطأ في الرادار: {e}")
     finally:
         if user_app.is_connected:
             await user_app.stop()
+
 
 # --- التشغيل الرئيسي ---
 if __name__ == "__main__":
