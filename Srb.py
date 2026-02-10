@@ -194,7 +194,7 @@ async def notify_users(detected_district, original_msg):
         
         # 3. تجهيز الأزرار
                 # اسم يوزر البوت الخاص بك (بدون @)
-        bot_username = "Mishweribot" 
+        bot_username = "Mishweriibot" 
         
         # إنشاء رابط وسيط يحتوي على آيدي العميل
         gateway_url = f"https://t.me/{bot_username}?start=chat_{customer.id}"
@@ -245,7 +245,7 @@ async def notify_channel(detected_district, original_msg):
         bot_username = "Mishweriibot" 
 
         # ✅ توحيد الرابط ليستخدم "chat_" ليتوافق مع معالج start_command
-        gate_contact = f"https://t.me/{bot_username}?start=chat_{customer_id}"
+        gate_contact = f"https://t.me/{bot_username}?start=direct_{customer_id}"
 
         buttons = [
             # هذا الزر الآن يوجه لنفس المعالج الذي يفحص الاشتراك
