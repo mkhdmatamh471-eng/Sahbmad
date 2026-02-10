@@ -4,10 +4,10 @@ import sys
 import os
 import logging
 import re
-import psycopg2  #أضف هذا السطر
-import psycopg2.pool #  وأيضاً هذا لعمل المجمع (Pool)
+import psycopg2 
+import psycopg2.pool  
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from pyrogram import Client, filters #  تأكد من إضافة filters هنا أيضاً
+from pyrogram import Client, filters 
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 import google.generativeai as genai
@@ -263,6 +263,26 @@ async def notify_channel(detected_district, original_msg):
 
     except Exception as e:
         print(f"❌ خطأ إرسال للقناة: {e}")
+
+
+# --- كلاس ودالة خادم الصحة (Health Check) ---
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is Running")
+    
+    # لإيقاف ظهور سجلات الخادم المزعجة في التيرمينال
+    def log_message(self, format, *args): 
+        return
+
+def run_health_server():
+    # نستخدم البورت الذي يحدده Render أو 10000 كاحتياطي
+    port = int(os.environ.get("PORT", 10000))
+    print(f"🌍 تشغيل خادم الصحة على المنفذ: {port}")
+    httpd = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
+    httpd.serve_forever()
+
 # ---------------------------------------------------------
 # 4. الرادار الرئيسي
 # ---------------------------------------------------------
@@ -347,21 +367,23 @@ async def start_radar():
         if user_app.is_connected:
             await user_app.stop()
 
-# --- قسم التشغيل (الذي يحل مشاكل Render Loops) ---
+# --- التشغيل الرئيسي ---
 if __name__ == "__main__":
-    # تشغيل خادم الصحة في الخلفية
+    # 1. تشغيل خادم الويب في خيط منفصل (Thread)
+    # الآن الدالة run_health_server موجودة ولن يظهر خطأ
     threading.Thread(target=run_health_server, daemon=True).start()
     
-    # التعامل مع حلقة الأحداث (Event Loop) بشكل صحيح
+    # 2. إعداد حلقة الأحداث (Loop) للرادار
     try:
         loop = asyncio.get_event_loop()
     except RuntimeError:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
+    # 3. تشغيل الرادار
     try:
         loop.run_until_complete(start_radar())
     except (KeyboardInterrupt, SystemExit):
         print("👋 تم إيقاف الرادار يدوياً")
     except Exception as e:
-        print(f"⚠️ خطأ في حلقة التشغيل: {e}")
+        print(f"⚠️ خطأ غير متوقع في التشغيل: {e}")
