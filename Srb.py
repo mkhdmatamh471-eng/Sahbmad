@@ -4,10 +4,10 @@ import sys
 import os
 import logging
 import re
-import psycopg2  # 👈 أضف هذا السطر
-import psycopg2.pool # 👈 وأيضاً هذا لعمل المجمع (Pool)
+import psycopg2  #أضف هذا السطر
+import psycopg2.pool #  وأيضاً هذا لعمل المجمع (Pool)
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from pyrogram import Client, filters # 👈 تأكد من إضافة filters هنا أيضاً
+from pyrogram import Client, filters #  تأكد من إضافة filters هنا أيضاً
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 import google.generativeai as genai
