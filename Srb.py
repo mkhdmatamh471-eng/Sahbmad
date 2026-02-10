@@ -305,68 +305,63 @@ async def message_handler(client, msg):
         logging.error(f"⚠️ خطأ في معالجة الرسالة: {e}")
 
 # --- [تطوير] دالة التشغيل الرئيسية الموفرة للطاقة ---
+# تأكد من استيراد ChatType في بداية الملف إذا لم يكن موجوداً
+from pyrogram.enums import ChatType
+
 async def start_radar():
-    await user_app.start()
-    print("🚀 الرادار يعمل بنظام الفحص الهادئ لتجنب الـ Flood...")
+    print("🚀 بدء تشغيل الرادار...")
     
-    last_processed = {}
+    try:
+        # 1. تشغيل العميل
+        await user_app.start()
+        print("✅ تم اتصال اليوزر بوت بنجاح")
 
-    while True:
-        try:
-            # 1. زيادة وقت الانتظار الكلي بين الدورات (تجنب الإرهاق)
-            await asyncio.sleep(15) 
+        # 2. 🔄 القراءة التلقائية للمجموعات (Auto-Discovery)
+        # هذا الجزء يحل مشكلة Peer id invalid لجميع المجموعات دفعة واحدة
+        print("⏳ جاري تحميل قائمة المجموعات وتحديث الكاش...")
+        
+        group_count = 0
+        async for dialog in user_app.get_dialogs():
+            # نتحقق إذا كانت المحادثة مجموعة أو سوبر جروب
+            if dialog.chat.type in [ChatType.GROUP, ChatType.SUPERGROUP]:
+                # مجرد المرور على المحادثة هنا يقوم بتخزين بياناتها في الكاش
+                group_count += 1
+                # طباعة اختيارية لمتابعة التحميل (يمكنك إلغاء السطر التالي لتقليل النصوص)
+                # print(f"🔹 تم التعرف على: {dialog.chat.title} ({dialog.chat.id})")
 
-            # 2. تقليل عدد الحوارات التي يتم فحصها (التركيز على الأهم)
-            async for dialog in user_app.get_dialogs(limit=25): 
-                if str(dialog.chat.type).upper() not in ["GROUP", "SUPERGROUP"]: 
-                    continue
-                
-                chat_id = dialog.chat.id
+        print(f"✅ تم الانتهاء! الرادار جاهز ويراقب {group_count} مجموعة الآن.")
+        
+        # إرسال رسالة تنبيه لنفسك (اختياري)
+        if TARGET_USERS:
+            try: 
+                await bot_sender.send_message(TARGET_USERS[0], f"✅ الرادار يعمل ويراقب {group_count} مجموعة")
+            except: pass
 
-                # 3. محاولة جلب آخر رسالة فقط
-                try:
-                    async for msg in user_app.get_chat_history(chat_id, limit=1):
-                        if chat_id in last_processed and msg.id <= last_processed[chat_id]:
-                            continue
+        # 3. الحفاظ على البوت يعمل (Loop)
+        while True:
+            await asyncio.sleep(3600) # نوم طويل لتقليل استهلاك المعالج
 
-                        last_processed[chat_id] = msg.id
-                        text = msg.text or msg.caption
-                        if not text or (msg.from_user and msg.from_user.is_self): continue
+    except Exception as e:
+        print(f"❌ خطأ غير متوقع في الرادار: {e}")
+    finally:
+        if user_app.is_connected:
+            await user_app.stop()
 
-                        found_district = analyze_message_by_districts(text)
-                        if found_district:
-                            await notify_users(found_district, msg)
-                            await notify_channel(found_district, msg)
-                            print(f"✅ تم التقاط طلب في حي: {found_district}")
-                    
-                    # 4. إضافة تأخير بسيط (نصف ثانية) بين كل مجموعة وأخرى داخل الدورة
-                    await asyncio.sleep(0.5)
-
-                except Exception as e_history:
-                    if "FloodWait" in str(e_history):
-                        # إذا واجهنا طلب انتظار، ننام للمدة المطلوبة
-                        wait_time = int(re.findall(r'\d+', str(e_history))[0])
-                        print(f"⚠️ طلب انتظار من تليجرام لمدة {wait_time} ثانية...")
-                        await asyncio.sleep(wait_time)
-                    continue
-
-        except Exception as e:
-            print(f"⚠️ خطأ في الدورة: {e}")
-            await asyncio.sleep(10)
-
-# --- خادم الويب (Health Check) ---
-class HealthCheckHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"Bot is Sending to Users Direct Message")
-    def log_message(self, format, *args): return
-
-def run_health_server():
-    port = int(os.environ.get("PORT", 10000))
-    httpd = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
-    httpd.serve_forever()
-
+# --- قسم التشغيل (الذي يحل مشاكل Render Loops) ---
 if __name__ == "__main__":
+    # تشغيل خادم الصحة في الخلفية
     threading.Thread(target=run_health_server, daemon=True).start()
-    asyncio.run(start_radar())
+    
+    # التعامل مع حلقة الأحداث (Event Loop) بشكل صحيح
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    try:
+        loop.run_until_complete(start_radar())
+    except (KeyboardInterrupt, SystemExit):
+        print("👋 تم إيقاف الرادار يدوياً")
+    except Exception as e:
+        print(f"⚠️ خطأ في حلقة التشغيل: {e}")
