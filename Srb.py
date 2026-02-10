@@ -102,13 +102,23 @@ IRRELEVANT_TOPICS = [
 async def analyze_message_hybrid(text):
     if not text or len(text) < 5 or len(text) > 400: return False
 
+    # 1. تنظيف النص من الزخارف والمسافات (لصيد الكلمات المقطعة)
     clean_text = normalize_text(text)
+    
+    # 2. [هام جداً] الفحص الصارم للكلمات المحظورة (القتل الفوري)
+    # إذا وجدت أي كلمة من "سكليف" أو "طبي" أو "إعلان"، نرفض الرسالة فوراً ولن نرسلها للـ AI
+    if any(k in clean_text for k in BLOCK_KEYWORDS): 
+        print(f"🚫 تم حظر الرسالة فوراً (كلمة محظورة من BLOCK_KEYWORDS)")
+        return False
+        
+    if any(k in clean_text for k in IRRELEVANT_TOPICS): 
+        print(f"🚫 تم حظر الرسالة فوراً (موضوع طبي/غير صلة)")
+        return False
+
+    # 3. فحص الأنماط السريعة (مثل: من.. إلى..)
     route_pattern = r"(^|\s)من\s+.*?\s+(إلى|الى|لـ|للحرم|للمطار)(\s|$)"
     if re.search(route_pattern, clean_text):
         return True 
-
-    if any(k in clean_text for k in BLOCK_KEYWORDS): return False
-    if any(k in clean_text for k in IRRELEVANT_TOPICS): return False
 
         # البرومبت الشامل (The Master Prompt)
     prompt = f"""
@@ -190,12 +200,11 @@ async def notify_users(detected_district, original_msg):
 
         keyboard = InlineKeyboardMarkup(buttons_list)
 
-        alert_text = (
+            alert_text = (
             f"🎯 <b>طلب جديد تم التقاطه!</b>\n\n"
             f"📍 <b>المنطقة:</b> {detected_district}\n"
             f"👤 <b>اسم العميل:</b> {customer.first_name if customer else 'مخفي'}\n"
-            f"📝 <b>نص الطلب:</b>\n<i>{content}</i>\n\n"
-            f"⏰ <b>الوقت:</b> {datetime.now().strftime('%H:%M:%S')}"
+            f"📝 <b>نص الطلب:</b>\n<i>{content}</i>"
         )
 
         for user_id in TARGET_USERS:
@@ -234,12 +243,11 @@ async def notify_channel(detected_district, original_msg):
 
         keyboard = InlineKeyboardMarkup(buttons)
 
-        alert_text = (
-            f"🎯 <b>طلب مشوار جديد</b>\n\n"
+            alert_text = (
+            f"🎯 <b>طلب جديد تم التقاطه!</b>\n\n"
             f"📍 <b>المنطقة:</b> {detected_district}\n"
-            f"📝 <b>التفاصيل:</b>\n<i>{content}</i>\n\n"
-            f"⏰ <b>الوقت:</b> {datetime.now().strftime('%H:%M:%S')}\n\n"
-            f"⚠️ <i>الزر أعلاه يفتح للمشتركين فقط.</i>"
+            f"👤 <b>اسم العميل:</b> {customer.first_name if customer else 'مخفي'}\n"
+            f"📝 <b>نص الطلب:</b>\n<i>{content}</i>"
         )
 
         await bot_sender.send_message(
