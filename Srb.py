@@ -200,7 +200,7 @@ async def notify_users(detected_district, original_msg):
 
         keyboard = InlineKeyboardMarkup(buttons_list)
 
-            alert_text = (
+        alert_text = (
             f"🎯 <b>طلب جديد تم التقاطه!</b>\n\n"
             f"📍 <b>المنطقة:</b> {detected_district}\n"
             f"👤 <b>اسم العميل:</b> {customer.first_name if customer else 'مخفي'}\n"
@@ -243,7 +243,7 @@ async def notify_channel(detected_district, original_msg):
 
         keyboard = InlineKeyboardMarkup(buttons)
 
-            alert_text = (
+        alert_text = (
             f"🎯 <b>طلب جديد تم التقاطه!</b>\n\n"
             f"📍 <b>المنطقة:</b> {detected_district}\n"
             f"👤 <b>اسم العميل:</b> {customer.first_name if customer else 'مخفي'}\n"
