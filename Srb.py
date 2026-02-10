@@ -179,32 +179,14 @@ async def notify_users(detected_district, original_msg):
 
     try:
         customer = original_msg.from_user
-
-        # 1. رابط حساب العميل المباشر
-        # إذا كان لدى العميل "username" نستخدمه، وإلا نستخدم "id" (رابط دائم)
-        if customer and customer.username:
-            direct_contact_url = f"https://t.me/{customer.username}"
-        elif customer:
-            direct_contact_url = f"tg://user?id={customer.id}"
-        else:
-            direct_contact_url = None # لا يمكن المراسلة إذا كان مخفياً
-
-        # 2. رابط مصدر الرسالة في الجروب
-        # ملاحظة: الروابط المباشرة للجروبات الخاصة تتطلب أن يكون المستخدم منضماً للجروب
-        
-        # 3. تجهيز الأزرار
-                # اسم يوزر البوت الخاص بك (بدون @)
         bot_username = "Mishweriibot" 
         
-        # إنشاء رابط وسيط يحتوي على آيدي العميل
-        gateway_url = f"https://t.me/{bot_username}?start=chat_{customer.id}"
+        # ✅ استخدام "direct_" للسائقين المختارين لتجاوز فحص الاشتراك لاحقاً
+        gateway_url = f"https://t.me/{bot_username}?start=direct_{customer.id}"
 
         buttons_list = [
-            [InlineKeyboardButton("💬 مراسلة العميل (عبر البوت)", url=gateway_url)],
+            [InlineKeyboardButton("💬 مراسلة العميل الآن", url=gateway_url)],
         ]
-
-        # زر المصدر
-       
 
         keyboard = InlineKeyboardMarkup(buttons_list)
 
@@ -216,7 +198,6 @@ async def notify_users(detected_district, original_msg):
             f"⏰ <b>الوقت:</b> {datetime.now().strftime('%H:%M:%S')}"
         )
 
-        # 4. التكرار لإرسال الرسالة لكل شخص في القائمة TARGET_USERS
         for user_id in TARGET_USERS:
             try:
                 await bot_sender.send_message(
@@ -227,8 +208,6 @@ async def notify_users(detected_district, original_msg):
                 )
             except Exception as e_user:
                 print(f"⚠️ فشل الإرسال للمستخدم {user_id}: {e_user}")
-
-        print(f"✅ تم توزيع الطلب ({detected_district}) للمشتركين.")
 
     except Exception as e:
         print(f"❌ خطأ عام في دالة الإرسال: {e}")
@@ -245,12 +224,12 @@ async def notify_channel(detected_district, original_msg):
         bot_username = "Mishweriibot" 
 
         # ✅ توحيد الرابط ليستخدم "chat_" ليتوافق مع معالج start_command
-        gate_contact = f"https://t.me/{bot_username}?start=direct_{customer_id}"
+        gate_contact = f"https://t.me/{bot_username}?start=chat_{customer.id}"
 
         buttons = [
             # هذا الزر الآن يوجه لنفس المعالج الذي يفحص الاشتراك
             [InlineKeyboardButton("💬 مراسلة العميل (للمشتركين)", url=gate_contact)],
-            [InlineKeyboardButton("💳 للاشتراك وتفعيل الحساب", url="https://t.me/servecest")]
+            [InlineKeyboardButton("💳 للاشتراك وتفعيل الحساب", url="https://t.me/x3FreTx")]
         ]
 
         keyboard = InlineKeyboardMarkup(buttons)
@@ -276,69 +255,64 @@ async def notify_channel(detected_district, original_msg):
 # ---------------------------------------------------------
 # 4. الرادار الرئيسي
 # ---------------------------------------------------------
-async def start_radar():
-    await user_app.start()
-    print("🚀 الرادار يعمل ويرسل للمستخدمين المحددين...")
+# --- [تطوير] معالج الرسائل الجديد (المستمع) ---
+# هذا المعالج سيعمل تلقائياً عند وصول أي رسالة في المجموعات المشترك بها اليوزر بوت
+@user_app.on_message(filters.group & ~filters.me)
+async def message_handler(client, msg):
+    try:
+        text = msg.text or msg.caption
+        if not text or len(text) < 5:
+            return
 
-    # [هام] قم بإرسال رسالة تجريبية لنفسك عند التشغيل للتأكد
-    # يمكنك إزالة هذا السطر لاحقاً
+        # 1. التحليل الأولي السريع (قبل استهلاك AI) لتوفير الموارد
+        clean_text = normalize_text(text)
+        
+        # تخطي الرسائل التي تحتوي على كلمات محظورة فوراً
+        if any(k in clean_text for k in BLOCK_KEYWORDS) or any(k in clean_text for k in IRRELEVANT_TOPICS):
+            return
+
+        # 2. التحليل الهجين (Hybrid)
+        is_valid_order = await analyze_message_hybrid(text)
+
+        if is_valid_order:
+            # استخراج الحي
+            found_d = "عام"
+            text_c = normalize_text(text)
+            for city, districts in CITIES_DISTRICTS.items():
+                for d in districts:
+                    if normalize_text(d) in text_c:
+                        found_d = d
+                        break
+
+            # 3. إرسال الإشعارات
+            # نستخدم create_task لضمان عدم توقف الرادار أثناء الإرسال
+            asyncio.create_task(notify_users(found_d, msg))
+            asyncio.create_task(notify_channel(found_d, msg))
+            
+            logging.info(f"✅ تم التقاط طلب جديد: {found_d}")
+
+    except Exception as e:
+        logging.error(f"⚠️ خطأ في معالجة الرسالة: {e}")
+
+# --- [تطوير] دالة التشغيل الرئيسية الموفرة للطاقة ---
+async def start_radar():
+    print("🚀 الرادار يعمل الآن بنظام 'المستمع' الموفر للموارد...")
+    
+    # بدء تشغيل اليوزر بوت
+    await user_app.start()
+    
+    # إشعار تشغيل
     if TARGET_USERS:
         try:
-            await bot_sender.send_message(TARGET_USERS[0], "✅ تم تشغيل البوت بنجاح")
+            await bot_sender.send_message(TARGET_USERS[0], "✅ تم تشغيل الرادار بنظام المستمع السريع.")
         except: pass
 
-    last_processed = {}
-
-    while True:
-        try:
-            await asyncio.sleep(5) 
-
-            async for dialog in user_app.get_dialogs(limit=50):
-                # تأكد من أن الحوار هو "مجموعة" أو "سوبر جروب"
-                dialog_type = str(dialog.chat.type).upper()
-                if "GROUP" not in dialog_type and "SUPERGROUP" not in dialog_type: 
-                    continue
-
-                chat_id = dialog.chat.id
-
-                # جلب آخر رسالة
-                try:
-                    async for msg in user_app.get_chat_history(chat_id, limit=1):
-                        # تخطي الرسائل القديمة أو المعالجة مسبقاً
-                        if chat_id in last_processed and msg.id <= last_processed[chat_id]:
-                            continue
-
-                        last_processed[chat_id] = msg.id
-
-                        text = msg.text or msg.caption
-                        # تجاهل رسائل البوت نفسه أو الرسائل الفارغة
-                        if not text or (msg.from_user and msg.from_user.is_self): continue
-
-                        # التحليل
-                        is_valid_order = await analyze_message_hybrid(text)
-
-                        if is_valid_order:
-                            # استخراج الحي (اختياري)
-                            found_d = "عام"
-                            text_c = normalize_text(text)
-                            for city, districts in CITIES_DISTRICTS.items():
-                                for d in districts:
-                                    if normalize_text(d) in text_c:
-                                        found_d = d
-                                        break
-
-                            # [تعديل 3] استدعاء دالة الإرسال للمستخدمين
-                                       # ✅ [التعديل المطلوب] استدعاء الدالتين معاً
-                            await notify_users(found_d, msg)   # الإرسال للأشخاص في الخاص
-                            await notify_channel(found_d, msg) # الإرسال للقناة العامة
-
-                except Exception as e_chat:
-                    # أحياناً يحدث خطأ في قراءة مجموعة معينة، نتجاوزها
-                    continue
-
-        except Exception as e:
-            print(f"⚠️ خطأ في الدورة الرئيسية: {e}")
-            await asyncio.sleep(5)
+    # الحفاظ على البوت يعمل في وضع الاستماع المستمر (بدون استهلاك CPU)
+    from pyrogram.methods.utilities.idle import idle
+    await idle()
+    
+    # إغلاق آمن عند التوقف
+    await user_app.stop()
 
 # --- خادم الويب (Health Check) ---
 class HealthCheckHandler(BaseHTTPRequestHandler):
