@@ -306,23 +306,53 @@ async def message_handler(client, msg):
 
 # --- [تطوير] دالة التشغيل الرئيسية الموفرة للطاقة ---
 async def start_radar():
-    print("🚀 الرادار يعمل الآن بنظام 'المستمع' الموفر للموارد...")
-    
-    # بدء تشغيل اليوزر بوت
     await user_app.start()
+    print("🚀 الرادار يعمل بنظام الفحص الهادئ لتجنب الـ Flood...")
     
-    # إشعار تشغيل
-    if TARGET_USERS:
-        try:
-            await bot_sender.send_message(TARGET_USERS[0], "✅ تم تشغيل الرادار بنظام المستمع السريع.")
-        except: pass
+    last_processed = {}
 
-    # الحفاظ على البوت يعمل في وضع الاستماع المستمر (بدون استهلاك CPU)
-    from pyrogram.methods.utilities.idle import idle
-    await idle()
-    
-    # إغلاق آمن عند التوقف
-    await user_app.stop()
+    while True:
+        try:
+            # 1. زيادة وقت الانتظار الكلي بين الدورات (تجنب الإرهاق)
+            await asyncio.sleep(15) 
+
+            # 2. تقليل عدد الحوارات التي يتم فحصها (التركيز على الأهم)
+            async for dialog in user_app.get_dialogs(limit=25): 
+                if str(dialog.chat.type).upper() not in ["GROUP", "SUPERGROUP"]: 
+                    continue
+                
+                chat_id = dialog.chat.id
+
+                # 3. محاولة جلب آخر رسالة فقط
+                try:
+                    async for msg in user_app.get_chat_history(chat_id, limit=1):
+                        if chat_id in last_processed and msg.id <= last_processed[chat_id]:
+                            continue
+
+                        last_processed[chat_id] = msg.id
+                        text = msg.text or msg.caption
+                        if not text or (msg.from_user and msg.from_user.is_self): continue
+
+                        found_district = analyze_message_by_districts(text)
+                        if found_district:
+                            await notify_users(found_district, msg)
+                            await notify_channel(found_district, msg)
+                            print(f"✅ تم التقاط طلب في حي: {found_district}")
+                    
+                    # 4. إضافة تأخير بسيط (نصف ثانية) بين كل مجموعة وأخرى داخل الدورة
+                    await asyncio.sleep(0.5)
+
+                except Exception as e_history:
+                    if "FloodWait" in str(e_history):
+                        # إذا واجهنا طلب انتظار، ننام للمدة المطلوبة
+                        wait_time = int(re.findall(r'\d+', str(e_history))[0])
+                        print(f"⚠️ طلب انتظار من تليجرام لمدة {wait_time} ثانية...")
+                        await asyncio.sleep(wait_time)
+                    continue
+
+        except Exception as e:
+            print(f"⚠️ خطأ في الدورة: {e}")
+            await asyncio.sleep(10)
 
 # --- خادم الويب (Health Check) ---
 class HealthCheckHandler(BaseHTTPRequestHandler):
