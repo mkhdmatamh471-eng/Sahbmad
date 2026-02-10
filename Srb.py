@@ -12,6 +12,7 @@ from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 import google.generativeai as genai
 from datetime import datetime
+from pyrogram.enums import ChatType
 
 # --- إعداد السجلات ---
 logging.basicConfig(level=logging.INFO)
@@ -306,7 +307,6 @@ async def message_handler(client, msg):
 
 # --- [تطوير] دالة التشغيل الرئيسية الموفرة للطاقة ---
 # تأكد من استيراد ChatType في بداية الملف إذا لم يكن موجوداً
-from pyrogram.enums import ChatType
 
 async def start_radar():
     print("🚀 بدء تشغيل الرادار...")
