@@ -302,67 +302,52 @@ async def notify_channel(detected_district, original_msg):
 # ---------------------------------------------------------
 async def start_radar():
     await user_app.start()
-    print("🚀 الرادار يعمل ويرسل للمستخدمين المحددين...")
-
-    # [هام] قم بإرسال رسالة تجريبية لنفسك عند التشغيل للتأكد
-    # يمكنك إزالة هذا السطر لاحقاً
-    if TARGET_USERS:
-        try:
-            await bot_sender.send_message(TARGET_USERS[0], "✅ تم تشغيل البوت بنجاح")
-        except: pass
-
+    print("🚀 الرادار يعمل بنظام الفحص الهادئ لتجنب الـ Flood...")
+    
     last_processed = {}
 
     while True:
         try:
-            await asyncio.sleep(5) 
+            # 1. زيادة وقت الانتظار الكلي بين الدورات (تجنب الإرهاق)
+            await asyncio.sleep(15) 
 
-            async for dialog in user_app.get_dialogs(limit=50):
-                # تأكد من أن الحوار هو "مجموعة" أو "سوبر جروب"
-                dialog_type = str(dialog.chat.type).upper()
-                if "GROUP" not in dialog_type and "SUPERGROUP" not in dialog_type: 
+            # 2. تقليل عدد الحوارات التي يتم فحصها (التركيز على الأهم)
+            async for dialog in user_app.get_dialogs(limit=25): 
+                if str(dialog.chat.type).upper() not in ["GROUP", "SUPERGROUP"]: 
                     continue
-
+                
                 chat_id = dialog.chat.id
 
-                # جلب آخر رسالة
+                # 3. محاولة جلب آخر رسالة فقط
                 try:
                     async for msg in user_app.get_chat_history(chat_id, limit=1):
-                        # تخطي الرسائل القديمة أو المعالجة مسبقاً
                         if chat_id in last_processed and msg.id <= last_processed[chat_id]:
                             continue
 
                         last_processed[chat_id] = msg.id
-
                         text = msg.text or msg.caption
-                        # تجاهل رسائل البوت نفسه أو الرسائل الفارغة
                         if not text or (msg.from_user and msg.from_user.is_self): continue
 
-                        # التحليل
-                        is_valid_order = await analyze_message_hybrid(text)
+                        found_district = analyze_message_by_districts(text)
+                        if found_district:
+                            await notify_users(found_district, msg)
+                            await notify_channel(found_district, msg)
+                            print(f"✅ تم التقاط طلب في حي: {found_district}")
+                    
+                    # 4. إضافة تأخير بسيط (نصف ثانية) بين كل مجموعة وأخرى داخل الدورة
+                    await asyncio.sleep(0.5)
 
-                        if is_valid_order:
-                            # استخراج الحي (اختياري)
-                            found_d = "عام"
-                            text_c = normalize_text(text)
-                            for city, districts in CITIES_DISTRICTS.items():
-                                for d in districts:
-                                    if normalize_text(d) in text_c:
-                                        found_d = d
-                                        break
-
-                            # [تعديل 3] استدعاء دالة الإرسال للمستخدمين
-                                       # ✅ [التعديل المطلوب] استدعاء الدالتين معاً
-                            await notify_users(found_d, msg)   # الإرسال للأشخاص في الخاص
-                            await notify_channel(found_d, msg) # الإرسال للقناة العامة
-
-                except Exception as e_chat:
-                    # أحياناً يحدث خطأ في قراءة مجموعة معينة، نتجاوزها
+                except Exception as e_history:
+                    if "FloodWait" in str(e_history):
+                        # إذا واجهنا طلب انتظار، ننام للمدة المطلوبة
+                        wait_time = int(re.findall(r'\d+', str(e_history))[0])
+                        print(f"⚠️ طلب انتظار من تليجرام لمدة {wait_time} ثانية...")
+                        await asyncio.sleep(wait_time)
                     continue
 
         except Exception as e:
-            print(f"⚠️ خطأ في الدورة الرئيسية: {e}")
-            await asyncio.sleep(5)
+            print(f"⚠️ خطأ في الدورة: {e}")
+            await asyncio.sleep(10)
 
 # --- خادم الويب (Health Check) ---
 class HealthCheckHandler(BaseHTTPRequestHandler):
