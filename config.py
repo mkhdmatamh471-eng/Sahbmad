@@ -50,6 +50,73 @@ CITIES_DISTRICTS = {
 
 # --- 3. معالجة النصوص (الذكاء اللغوي) ---
 
+try:
+    # إنشاء مجمع يتسع لـ 1 إلى 20 اتصال متزامن
+    db_pool = psycopg2.pool.ThreadedConnectionPool(
+        minconn=1, 
+        maxconn=20, 
+        dsn=DB_URL,
+        sslmode='require' # ضروري جداً لريندر
+    )
+    print("✅ تم تفعيل مجمع اتصالات قاعدة البيانات (Connection Pool)")
+except Exception as e:
+    print(f"❌ فشل إنشاء مجمع الاتصالات: {e}")
+    db_pool = None
+
+# ==========================================
+# 2. دوال الإدارة الأساسية (Helper Functions)
+# ==========================================
+
+def get_db_connection():
+    """الحصول على اتصال آمن مع فحص حيويته (Health Check)"""
+    global db_pool
+    
+    if db_pool is None:
+        try:
+            fixed_url = DB_URL.replace("postgres://", "postgresql://")
+            db_pool = psycopg2.pool.ThreadedConnectionPool(1, 20, dsn=fixed_url, sslmode='require')
+        except Exception as e:
+            print(f"❌ فشل إنشاء المجمع: {e}")
+            return None
+
+    try:
+        conn = db_pool.getconn()
+        
+        # --- الفحص الحيوي (Health Check) ---
+        # نقوم بعمل استعلام فارغ للتأكد من أن الاتصال لا يزال حياً
+        try:
+            with conn.cursor() as tmp_cur:
+                tmp_cur.execute('SELECT 1')
+        except (psycopg2.OperationalError, psycopg2.InterfaceError):
+            print("🔄 اكتشاف اتصال ميت في المجمع، يتم استبداله...")
+            db_pool.putconn(conn, close=True) # التخلص من الاتصال التالف
+            return db_pool.getconn()          # جلب اتصال جديد ونظيف
+            
+        return conn
+    except Exception as e:
+        print(f"⚠️ خطأ في سحب اتصال: {e}")
+        db_pool = None 
+        return None
+
+def release_db_connection(conn):
+    if not conn:
+        return
+    try:
+        if db_pool:
+            # التحقق إذا كان الاتصال لا يزال مفتوحاً قبل إعادته للمجمع
+            if not conn.closed:
+                db_pool.putconn(conn)
+            else:
+                # إذا كان مغلقاً أصلاً، فقط نتجاهله (المجمع سيتولى التعويض)
+                pass
+        else:
+            conn.close()
+    except Exception as e:
+        print(f"⚠️ خطأ أثناء تحرير الاتصال: {e}")
+        try: conn.close() 
+        except: pass
+
+
 def normalize_text(text):
     """تنظيف وتوحيد النصوص العربية لزيادة دقة البحث عن الأحياء والطلبات"""
     if not text: return ""
