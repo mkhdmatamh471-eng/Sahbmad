@@ -19,7 +19,7 @@ logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 # --- استيراد الإعدادات ---
 try:
-    from config import normalize_text, CITIES_DISTRICTS, BOT_TOKEN, get_db_connection, release_db_connection
+    from config import normalize_text, CITIES_DISTRICTS, BOT_TOKEN
     print("✅ تم تحميل الإعدادات بنجاح")
 except Exception as e:
     print(f"❌ خطأ في تحميل ملف config.py: {e}")
