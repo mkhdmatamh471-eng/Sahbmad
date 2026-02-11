@@ -56,9 +56,10 @@ generation_config = {
   "top_k": 40,
   "max_output_tokens": 5,
 }
+# اذهب إلى قسم إعداد Gemini وغير هذا السطر:
 ai_model = genai.GenerativeModel(
-  model_name="gemini-1.5-flash",
-  generation_config=generation_config,
+    model_name='gemini-1.5-flash-latest', # أضف كلمة latest
+    generation_config=generation_config
 )
 
 # --- عملاء تليجرام ---
