@@ -1,26 +1,28 @@
 import asyncio
+import threading
 import sys
 import os
 import logging
-from pyrogram import Client, filters 
+import re
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from pyrogram import Client
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 import google.generativeai as genai
-from pyrogram.enums import ChatType
+from datetime import datetime
 
 # --- إعداد السجلات ---
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("pyrogram").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
-# --- استيراد الإعدادات الخارجية ---
+# --- استيراد الإعدادات ---
 try:
     from config import normalize_text, CITIES_DISTRICTS, BOT_TOKEN
-    print("✅ تم تحميل الإعدادات من config.py بنجاح")
+    print("✅ تم تحميل الإعدادات بنجاح")
 except Exception as e:
-    print(f"❌ خطأ فادح: فشل تحميل config.py. تأكد من وجود الملف. التفاصيل: {e}")
+    print(f"❌ خطأ في تحميل ملف config.py: {e}")
     sys.exit(1)
 
 # --- متغيرات البيئة ---
@@ -28,180 +30,355 @@ API_ID = os.environ.get("API_ID", "36360458")
 API_HASH = os.environ.get("API_HASH", "daae4628b4b4aac1f0ebfce23c4fa272")
 SESSION_STRING = os.environ.get("SESSION_STRING", "BAIq0QoAhqQ7maNFOf6AUKx6sP1-w-GnmTM4GCyqL0INirrOO99rgvLN38CRda5n7P4vstDSL8lBamXl5i8urauRc3Zpq54NJsBdJyNy8pqhp9KzAGDoE1Lveo78y_81h81QYcn_7NQeMQIJLM5uw3S2XPnzYif7y_LYewcx15ZY_kgKWOE4mx0YZvt4V_8h3_zSSVsAWvY3rz_H0TmknpCgczsXx6XfhW90CekcU0-nH39h9ocdtYy6uJ9cXDqsHFf45wSwL5A9tuQNRTzbwe6uIrNTWwNzz86O7jysD53YEeV2zCx625iXuoDYy3b6YJnHzgGmKRpdts7LzrGEoOanUDLYSgAAAAH-ZrzOAA")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyDvEF8WDhGt6nDWjqxgix0Rb8qaAmtEPbk")
-BOT_USERNAME = "Mishwariibot" 
-CHANNEL_ID = -1003763324430 
 
-# قائمة الـ IDs الذين يستلمون الطلبات في الخاص
+# ---------------------------------------------------------
+# 🛠️ [تعديل 1] قائمة المستخدمين الذين سيستلمون الطلبات
+# ضع الـ IDs الخاصة بهم هنا (أرقام فقط)
+# ---------------------------------------------------------
+# 🛠️ قائمة الـ IDs المحدثة الذين سيستلمون الطلبات في الخاص (مفتوحة)
 TARGET_USERS = [
     8563113166, 7897973056, 8123777916, 8181237063, 8246402319, 
     6493378017, 7068172120, 1658903455, 1506018292, 1193267455, 
     627214092, 336092598, 302374285, 987654321
 ]
+ # <--- ضع الآيديات الحقيقية هنا
 
-# --- إعداد Gemini ---
+CHANNEL_ID = -1003763324430 
+
+# --- إعداد Gemini 1.5 Flash ---
 genai.configure(api_key=GEMINI_API_KEY)
+generation_config = {
+  "temperature": 0.1,
+  "top_p": 0.95,
+  "top_k": 40,
+  "max_output_tokens": 5,
+}
 ai_model = genai.GenerativeModel(
-    model_name="gemini-1.5-flash",
-    generation_config={"temperature": 0.1, "max_output_tokens": 10}
+  model_name="gemini-1.5-flash",
+  generation_config=generation_config,
 )
 
 # --- عملاء تليجرام ---
 user_app = Client("my_session", session_string=SESSION_STRING, api_id=API_ID, api_hash=API_HASH)
 bot_sender = Bot(token=BOT_TOKEN)
 
-# --- قوائم الفلترة الصارمة ---
+# ---------------------------------------------------------
+# قوائم الفلترة (كما هي في كودك الأصلي)
+# ---------------------------------------------------------
+# قائمة 1: كلمات تدل أن المرسل سائق أو إعلان أو مواضيع محظورة (حظر فوري)
 BLOCK_KEYWORDS = [
-    "متواجد الآن", "شغال الآن", "سيارة نظيفة", "أسعارنا", "بخدمتكم", "أوصل مشاوير", 
-    "واتساب", "نقل عفش", "سطحة", "تأمين", "قرض", "تمويل", "خادمات", "عقار", 
-    "مسيار", "خطابة", "تجديد", "معقب"
+    "متواجد", "متاح", "شغال", "جاهز", "أسعارنا", "سيارة نظيفة", "نقل عفش", 
+    "دربك سمح", "توصيل مشاوير", "أوصل", "اوصل", "اتصال", "واتساب", "للتواصل",
+    "خاص", "الخاص", "بخدمتكم", "خدمتكم", "أستقبل", "استقبل", "نقل بضائع",
+    "مشاويركم", "سياره نظيفه", "فان", "دباب", "سطحه", "سطحة", "كابتن", 
+    "مندوب", "مناديب", "توصيل طلبات", "ارخص الأسعار", "أرخص الأسعار", "بأسعار",
+    "عقار", "عقارات", "للبيع", "للإيجار", "للايجار", "دور", "شقة", "شقه",
+    "رخصة فال", "رخصة", "رخصه", "مخطط", "أرض", "ارض", "فلة", "فله", 
+    "عماره", "عمارة", "استثمار", "صك", "إفراغ", "الوساطة العقارية", "تجاري", "سكني",
+    "اشتراك", "باقات", "تسجيل", "تأمين", "تفويض", "تجديد", "قرض", "تمويل", 
+    "بنك", "تسديد", "مخالفات", "اعلان", "إعلان", "قروب", "مجموعة", "انضم", 
+    "رابط", "نشر", "قوانين", "احترام", "الذوق العام", "استقدام", "خادمات",
+    "تعقيب", "معقب", "انجاز", "إنجاز", "كفيل", "نقل كفالة", "اسقاط", "تعديل مهنة",
+    "حياك الله", "نورتنا", "انضمامك", "أهلاً بك", "اهلا بك", "قواعد المجموعة",
+    "مرحباً بك", "مرحبا بك", "تنبيه", "محظور", "يُمنع", "يمنع", "بالتوفيق للجميع",
+    "http", "t.me", ".com", "رابط القناة", "اخلاء مسؤولية", "ذمة",
+    # الكلمات الجديدة المضافة:
+    "استثمار", "زواج", "مسيار", "خطابه", "خطابة"
 ]
 
+# قائمة 2: كلمات خارج السياق (طبي، أعذار، استفسارات عامة) - حظر فوري
 IRRELEVANT_TOPICS = [
-    "عذر طبي", "سكليف", "تقويم اسنان", "قطع غيار", "سمكري", "افضل دكتور", "مين جرب"
+    "عيادة", "عياده", "اسنان", "أسنان", "دكتور", "طبيب", "مستشفى", "مستوصف",
+    "علاج", "تركيب", "تقويم", "خلع", "حشو", "تنظيف", "استفسار", "افضل", "أفضل",
+    "تجربة", "مين جرب", "رأيكم", "تنصحون", "ورشة", "سمكري", "قطع غيار",
+    # الكلمات الجديدة المضافة:
+    "عذر طبي", "سكليف", "سكليفات"
 ]
 
-# ---------------------------------------------------------
-# المحرك الذكي للفلترة والتحليل
-# ---------------------------------------------------------
 
-def manual_fallback_check_madinah(clean_text):
-    """فحص يدوي سريع للكلمات المفتاحية للمدينة المنورة"""
-    order_triggers = ["ابي", "أبغا", "محتاج", "مطلوب", "يوصلني", "بكم", "مشوار", "كابتن"]
-    madinah_keywords = [
-        "الحرم", "النبوي", "العزيزية", "شوران", "الهجرة", "العوالي", "قربان", 
-        "سلطانة", "القبلتين", "المطار", "القطار", "قباء", "احد", "الراشد", "النور"
-    ]
-    
-    has_order = any(w in clean_text for w in order_triggers)
-    has_geo = any(w in clean_text for w in madinah_keywords)
-    
-    # التقاط صيغ الروابط (من.. إلى..)
-    has_route = "من" in clean_text and any(x in clean_text for x in ["الى", "إلى", "لـ"])
-    
-    return (has_order and has_geo) or has_route
-
+# ---------------------------------------------------------
+# 2. المحرك الهجين (Hybrid Engine)
+# ---------------------------------------------------------
 async def analyze_message_hybrid(text):
-    """تحليل هجين: فلاتر -> يدوي -> ذكاء اصطناعي"""
-    if not text or len(text) < 8: return False
-    
+    if not text or len(text) < 5 or len(text) > 400: return False
+
     clean_text = normalize_text(text)
+    route_pattern = r"(^|\s)من\s+.*?\s+(إلى|الى|لـ|للحرم|للمطار)(\s|$)"
+    if re.search(route_pattern, clean_text):
+        return True 
+
+    if any(k in clean_text for k in BLOCK_KEYWORDS): return False
+    if any(k in clean_text for k in IRRELEVANT_TOPICS): return False
+
+        # البرومبت الشامل (The Master Prompt)
+    prompt = f"""
+    Role: You are an elite AI Traffic Controller for a specific 'Madinah Taxi & Delivery' Telegram group.
+    Objective: Filter messages to identify REAL CUSTOMERS seeking services (Rides, Delivery, School Transport).
     
-    # 1. استبعاد الإعلانات والسبام فوراً
-    if any(k in clean_text for k in BLOCK_KEYWORDS + IRRELEVANT_TOPICS): 
-        return False
+    [STRICT ANALYSIS RULES]
+    You must classify the "Intent" of the sender.
+    - SENDER = CUSTOMER (Needs service) -> Reply 'YES'
+    - SENDER = DRIVER (Offers service) -> Reply 'NO'
+    - SENDER = SPAM/CHATTER -> Reply 'NO'
 
-    # 2. الفحص اليدوي (يوفر استهلاك الـ AI)
-    if manual_fallback_check_madinah(clean_text):
-        return True
+    [✅ CLASSIFY AS 'YES' (CUSTOMER REQUESTS)]
+    1. Explicit Ride Requests: (e.g., "أبغى سواق", "مطلوب كابتن", "سيارة للحرم", "مين يوديني؟").
+    2. Route Descriptions (Implicit): Text mentioning a destination or path (e.g., "من العزيزية للحرم", "مشوار للمطار", "إلى الراشد مول").
+    3. Location Pings (Incomplete Requests): If someone just names a location implies they need a driver there (e.g., "حي شوران؟", "أحد حول العالية؟", "في كباتن في الهجرة؟").
+    4. School & Monthly Contracts: (e.g., "توصيل مدارس", "نقل طالبات", "عقد شهري", "توصيل دوام").
+    5. Delivery & Logistics: Requests to move items (e.g., "توصيل غرض", "توصيل مفتاح", "طلبية من زاجل", "توصيل أكل").
+    6. Price Inquiries by Customer: (e.g., "بكم المشوار للمطار؟", "توديني بـ 20؟").
 
-    # 3. الاستعانة بالذكاء الاصطناعي للحالات غير الواضحة
-    prompt = f"Is this text a customer asking for a taxi/delivery in Madinah? Answer YES or NO only. Text: '{text}'"
+    [❌ CLASSIFY AS 'NO' (IGNORE THESE)]
+    1. Driver Offers (Supply): Any text indicating the sender IS a driver (e.g., "متواجد", "جاهز للتوصيل", "سيارة حديثة", "توصيل مشاوير", "على مدار الساعة", "الخاص مفتوح").
+    2. Social & Religious: Greetings, prayers, wisdom (e.g., "صباح الخير", "جمعة مباركة", "سبحان الله", "دعاء", "حكم").
+    3. Forbidden Spam Topics: 
+       - Medical Excuses (e.g., "سكليف", "عذر طبي", "اجازة مرضية").
+       - Marriage/Social (e.g., "خطابة", "زواج مسيار", "تعارف").
+       - Financial/Real Estate (e.g., "قروض", "أرض للبيع", "استثمار").
+    4. General Chat/Admin: Questions about rules, links, or weather.
+
+    [📍 MADINAH CONTEXT KNOWLEDGE]
+    Treat these as valid locations implying a request if mentioned alone:
+    (Haram, Airport, Train Station, Aziziya, Shoran, Awali, Hijra, Baqdo, Quba, Sultana, Rashid Mall, Al-Noor, Taiba).
+
+    [DECISION LOGIC]
+    - "From A to B" -> YES
+    - "I am available" -> NO
+    - "School delivery needed" -> YES
+    - "Sick leave for sale" -> NO
+    - "Who is in Shoran?" -> YES
+
+    Input Text: "{text}"
+
+    FINAL ANSWER (Reply ONLY with 'YES' or 'NO'):
+    """
+
     try:
         response = await asyncio.to_thread(ai_model.generate_content, prompt)
-        return "YES" in response.text.upper()
+        result = response.text.strip().upper().replace(".", "")
+        return "YES" in result
     except Exception as e:
-        logging.error(f"⚠️ AI Error: {e}")
-        return False
+        print(f"⚠️ تجاوز AI (فشل الاتصال): {e}")
+        return manual_fallback_check(clean_text)
+
+def manual_fallback_check(clean_text):
+    order_words = ["ابي", "ابغي", "محتاج", "نبي", "مطلوب", "بكم"]
+    service_words = ["سواق", "توصيل", "مشوار", "يوديني", "يوصلني"]
+    has_order = any(w in clean_text for w in order_words)
+    has_service = any(w in clean_text for w in service_words)
+    has_route = "من " in clean_text and ("الى" in clean_text or "لي" in clean_text)
+    return (has_order and has_service) or has_route
 
 # ---------------------------------------------------------
-# نظام الإشعارات الموحد
+# 3. [تعديل 2] دالة الإرسال للمستخدمين المحددين
 # ---------------------------------------------------------
 
-async def notify_all(detected_district, msg):
-    """إرسال الإشعارات للمستخدمين والقناة في وقت واحد"""
-    content = msg.text or msg.caption
-    customer = msg.from_user
-    if not customer: return
+async def broadcast_order_to_drivers(detected_district, original_msg):
+    """
+    توزيع الطلب على جميع السائقين في قاعدة البيانات.
+    المشترك: يصله زر التواصل.
+    غير المشترك: يصله الطلب بدون زر التواصل.
+    """
+    content = original_msg.text or original_msg.caption
+    customer = original_msg.from_user
+    
+    if not content or not customer: return
 
-    # روابط التواصل
-    direct_url = f"https://t.me/{BOT_USERNAME}?start=direct_{customer.id}"
-    channel_sub_url = "https://t.me/x3FreTx"
+    # 1. تجهيز رابط التواصل (Direct Link)
+    if customer.username:
+        contact_url = f"https://t.me/{customer.username}"
+    else:
+        contact_url = f"tg://user?id={customer.id}"
 
-    alert_text = (
-        f"🎯 <b>طلب جديد في المدينة المنورة!</b>\n\n"
+    # 2. نص الرسالة الأساسي (احترافي ومنظم)
+    base_text = (
+        f"🎯 <b>طلب مشوار جديد</b>\n\n"
         f"📍 <b>المنطقة:</b> {detected_district}\n"
         f"👤 <b>العميل:</b> {customer.first_name}\n"
-        f"📝 <b>الطلب:</b>\n<i>{content}</i>"
+        f"📝 <b>التفاصيل:</b>\n<i>{content}</i>\n"
+        f"━━━━━━━━━━━━━━\n"
     )
 
-    # مهام الإرسال
-    tasks = []
-    
-    # إرسال للمستخدمين المستهدفين
-    kb_user = InlineKeyboardMarkup([[InlineKeyboardButton("💬 مراسلة العميل الآن", url=direct_url)]])
-    for user_id in TARGET_USERS:
-        tasks.append(bot_sender.send_message(user_id, alert_text, reply_markup=kb_user, parse_mode=ParseMode.HTML))
+    # 3. استخدام اتصال قاعدة البيانات المستورد من config
+    conn = get_db_connection()
+    if not conn: 
+        print("❌ فشل الاتصال بقاعدة البيانات أثناء البث")
+        return
 
-    # إرسال للقناة
-    kb_chan = InlineKeyboardMarkup([[InlineKeyboardButton("💳 للاشتراك وتفعيل الحساب", url=channel_sub_url)]])
-    tasks.append(bot_sender.send_message(CHANNEL_ID, alert_text, reply_markup=kb_chan, parse_mode=ParseMode.HTML))
-
-    # تنفيذ الإرسال بشكل متوازي لسرعة البرق
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-    logging.info(f"✅ تم معالجة إرسال الطلب لـ {len(results)} وجهة.")
-
-# ---------------------------------------------------------
-# الرادار (المستمع الرئيسي)
-# ---------------------------------------------------------
-
-@user_app.on_message(filters.group & ~filters.me)
-async def radar_handler(client, msg):
     try:
-        text = msg.text or msg.caption
-        if not text: return
+        with conn.cursor() as cur:
+            # جلب كل السائقين الذين لم يتم حظرهم
+            cur.execute("SELECT user_id, subscription_expiry FROM users WHERE is_blocked = FALSE")
+            drivers = cur.fetchall()
 
-        if await analyze_message_hybrid(text):
-            # تحديد الحي
-            found_district = "المدينة (عام)"
-            text_normalized = normalize_text(text)
-            
-            # محاولة مطابقة الحي من القائمة في config
-            for city, districts in CITIES_DISTRICTS.items():
-                for d in districts:
-                    if normalize_text(d) in text_normalized:
-                        found_district = d
-                        break
+            for user_id, expiry in drivers:
+                # التحقق من صلاحية الاشتراك (مع مراعاة المنطقة الزمنية UTC)
+                is_active = False
+                if expiry:
+                    # نستخدم timezone-aware comparison لتجنب أخطاء النوع
+                    now = datetime.now(expiry.tzinfo if expiry.tzinfo else timezone.utc)
+                    if expiry > now:
+                        is_active = True
 
-            # تشغيل مهمة الإرسال في الخلفية لعدم تعطيل الرادار
-            asyncio.create_task(notify_all(found_district, msg))
+                # بناء لوحة الأزرار (Keyboard) بناءً على الحالة
+                if is_active:
+                    keyboard = InlineKeyboardMarkup([
+                        [InlineKeyboardButton("💬 مراسلة العميل مباشرة", url=contact_url)]
+                    ])
+                    msg_footer = "✅ <b>اشتراكك فعال - تواصل الآن</b>"
+                else:
+                    keyboard = InlineKeyboardMarkup([
+                        [InlineKeyboardButton("💳 اشترك لتفعيل زر المراسلة", url="https://t.me/x3FreTx")]
+                    ])
+                    msg_footer = "⚠️ <b>التواصل متاح للمشتركين فقط</b>"
+
+                try:
+                    await bot_sender.send_message(
+                        chat_id=user_id,
+                        text=base_text + msg_footer,
+                        reply_markup=keyboard,
+                        parse_mode=ParseMode.HTML
+                    )
+                    # تأخير بسيط جداً (50 مللي ثانية) لتجنب حظر تليجرام عند كثرة السائقين
+                    await asyncio.sleep(0.05) 
+                except Exception as e:
+                    # تخطي إذا قام المستخدم بحظر البوت أو حذف حسابه
+                    continue 
 
     except Exception as e:
-        logging.error(f"⚠️ خطأ في الرادار: {e}")
-
-# ---------------------------------------------------------
-# دالة التشغيل (نظيفة ومتوافقة مع Python 3.13)
-# ---------------------------------------------------------
-
-async def start_radar():
-    print("🚀 جاري تشغيل رادار المدينة المنورة...")
-    try:
-        await user_app.start()
-        print("✅ تم اتصال اليوزر بوت بنجاح.")
-        
-        # إحصائية سريعة للمجموعات
-        group_count = 0
-        async for dialog in user_app.get_dialogs():
-            if dialog.chat.type in [ChatType.GROUP, ChatType.SUPERGROUP]:
-                group_count += 1
-        
-        print(f"📡 الرادار يراقب الآن {group_count} مجموعة.")
-        print("🟢 البوت يعمل الآن (اعتمد على UptimeRobot للبقاء متيقظاً).")
-        
-        from pyrogram.methods.utilities.idle import idle
-        await idle()
-        
-    except Exception as e:
-        print(f"❌ خطأ فادح أثناء التشغيل: {e}")
+        print(f"❌ خطأ كارثي في عملية البث: {e}")
     finally:
-        if user_app.is_connected:
-            await user_app.stop()
+        release_db_connection(conn)
+
+async def notify_channel(detected_district, original_msg):
+    content = original_msg.text or original_msg.caption
+    if not content: return
+
+    try:
+        customer = original_msg.from_user
+        # استخراج المعرفات اللازمة
+        customer_id = customer.id if customer else 0
+        msg_id = getattr(original_msg, "id", getattr(original_msg, "message_id", 0))
+        chat_id_str = str(original_msg.chat.id).replace("-100", "")
+
+        # --- الإعدادات (تأكد من مطابقة يوزر البوت) ---
+        # استبدل 'YourBotUsername' بيوزر بوتك بدون علامة @
+        bot_username = "Mishwariibot" 
+
+        # تجهيز الروابط العميقة (Deep Links)
+        # الرابط الأول لمراسلة العميل
+        gate_contact = f"https://t.me/{bot_username}?start=contact_{customer_id}"
+        # الرابط الثاني لمصدر الطلب في الجروب
+        gate_source = f"https://t.me/{bot_username}?start=source_{chat_id_str}_{msg_id}"
+
+        buttons = [
+            [InlineKeyboardButton("💬 مراسلة العميل (للمشتركين)", url=gate_contact)],
+            [InlineKeyboardButton("💳 للاشتراك وتفعيل الحساب", url="https://t.me/x3FreTx")]
+        ]
+
+        keyboard = InlineKeyboardMarkup(buttons)
+
+        alert_text = (
+            f"🎯 <b>طلب مشوار جديد</b>\n\n"
+            f"📍 <b>المنطقة:</b> {detected_district}\n"
+            f"📝 <b>التفاصيل:</b>\n<i>{content}</i>\n\n"
+            f"⏰ <b>الوقت:</b> {datetime.now().strftime('%H:%M:%S')}\n"
+            f"⚠️ <i>الروابط أعلاه تفتح للمشتركين فقط.</i>"
+        )
+
+        await bot_sender.send_message(
+            chat_id=CHANNEL_ID,
+            text=alert_text,
+            reply_markup=keyboard,
+            parse_mode=ParseMode.HTML
+        )
+        print(f"✅ تم الإرسال للقناة بروابط مشفرة: {detected_district}")
+
+    except Exception as e:
+        print(f"❌ خطأ إرسال للقناة: {e}")
+
+
+# ---------------------------------------------------------
+# 4. الرادار الرئيسي
+# ---------------------------------------------------------
+async def start_radar():
+    await user_app.start()
+    print("🚀 الرادار يعمل ويرسل للمستخدمين المحددين...")
+
+    # [هام] قم بإرسال رسالة تجريبية لنفسك عند التشغيل للتأكد
+    # يمكنك إزالة هذا السطر لاحقاً
+    if TARGET_USERS:
+        try:
+            await bot_sender.send_message(TARGET_USERS[0], "✅ تم تشغيل البوت بنجاح")
+        except: pass
+
+    last_processed = {}
+
+    while True:
+        try:
+            await asyncio.sleep(5) 
+
+            async for dialog in user_app.get_dialogs(limit=50):
+                # تأكد من أن الحوار هو "مجموعة" أو "سوبر جروب"
+                dialog_type = str(dialog.chat.type).upper()
+                if "GROUP" not in dialog_type and "SUPERGROUP" not in dialog_type: 
+                    continue
+
+                chat_id = dialog.chat.id
+
+                # جلب آخر رسالة
+                try:
+                    async for msg in user_app.get_chat_history(chat_id, limit=1):
+                        # تخطي الرسائل القديمة أو المعالجة مسبقاً
+                        if chat_id in last_processed and msg.id <= last_processed[chat_id]:
+                            continue
+
+                        last_processed[chat_id] = msg.id
+
+                        text = msg.text or msg.caption
+                        # تجاهل رسائل البوت نفسه أو الرسائل الفارغة
+                        if not text or (msg.from_user and msg.from_user.is_self): continue
+
+                        # التحليل
+                        is_valid_order = await analyze_message_hybrid(text)
+
+                        if is_valid_order:
+                            # استخراج الحي (اختياري)
+                            found_d = "عام"
+                            text_c = normalize_text(text)
+                            for city, districts in CITIES_DISTRICTS.items():
+                                for d in districts:
+                                    if normalize_text(d) in text_c:
+                                        found_d = d
+                                        break
+
+                            # [تعديل 3] استدعاء دالة الإرسال للمستخدمين
+                                       # ✅ [التعديل المطلوب] استدعاء الدالتين معاً
+                            await notify_users(found_d, msg)   # الإرسال للأشخاص في الخاص
+                            await notify_channel(found_d, msg) # الإرسال للقناة العامة
+
+                except Exception as e_chat:
+                    # أحياناً يحدث خطأ في قراءة مجموعة معينة، نتجاوزها
+                    continue
+
+        except Exception as e:
+            print(f"⚠️ خطأ في الدورة الرئيسية: {e}")
+            await asyncio.sleep(5)
+
+# --- خادم الويب (Health Check) ---
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is Sending to Users Direct Message")
+    def log_message(self, format, *args): return
+
+def run_health_server():
+    port = int(os.environ.get("PORT", 10000))
+    httpd = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
+    httpd.serve_forever()
 
 if __name__ == "__main__":
-    try:
-        # استخدام asyncio.run يضمن وجود Event Loop واحد فقط ويحل خطأ Different Loop
-        asyncio.run(start_radar())
-    except (KeyboardInterrupt, SystemExit):
-        print("\n👋 تم إيقاف الرادار يدوياً.")
-    except Exception as e:
-        print(f"⚠️ فشل النظام: {e}")
-        sys.exit(1)
+    threading.Thread(target=run_health_server, daemon=True).start()
+    asyncio.run(start_radar())
