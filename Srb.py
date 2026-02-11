@@ -9,7 +9,7 @@ from pyrogram import Client
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 import google.generativeai as genai
-from datetime import datetime
+from datetime import datetime, timezone
 from flask import Flask  # أضف هذا السطر
 import threading
 from pyrogram import Client, filters  # تأكد من إضافة filters هنا
