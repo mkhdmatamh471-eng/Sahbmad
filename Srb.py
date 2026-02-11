@@ -12,6 +12,7 @@ import google.generativeai as genai
 from datetime import datetime
 from flask import Flask  # أضف هذا السطر
 import threading
+from pyrogram import Client, filters  # تأكد من إضافة filters هنا
 
 # --- إعداد السجلات ---
 logging.basicConfig(level=logging.INFO)
