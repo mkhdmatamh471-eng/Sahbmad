@@ -231,7 +231,7 @@ async def notify_channel(detected_district, original_msg):
         customer_id = customer.id if customer else 0
         
         # --- الإعدادات ---
-        bot_username = "Mishweriibot" 
+        bot_username = "Mishwariibot" 
 
         # ✅ توحيد الرابط ليستخدم "chat_" ليتوافق مع معالج start_command
         gate_contact = f"https://t.me/{bot_username}?start=chat_{customer.id}"
