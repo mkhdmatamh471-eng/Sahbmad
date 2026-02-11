@@ -233,18 +233,22 @@ async def broadcast_order_to_drivers(detected_district, original_msg):
                 
                 footer = "✅ اشتراك فعال" if is_active else "⚠️ التواصل للمشتركين فقط"
 
+                
+                # --- إصلاح إزاحة بلوك الإرسال ---
                 try:
+                    # أضفنا disable_notification=False للتأكد من إصدار صوت تنبيه عند السائق
                     await bot_sender.send_message(
-                        chat_id=user_id,
-                        text=f"🎯 <b>طلب جديد في {detected_district}</b>\n\n{content}\n\n{footer}",
+                        chat_id=int(user_id),
+                        text=base_text + footer,
                         reply_markup=kb,
-                        parse_mode=ParseMode.HTML
+                        parse_mode=ParseMode.HTML,
+                        disable_notification=False 
                     )
-                    print(f"✅ تم الإرسال بنجاح للسائق {user_id}")
-                    await asyncio.sleep(0.05) 
+                    print(f"✅ تم تأكيد التسليم تقنياً للسائق: {user_id}")
                 except Exception as e:
-                    print(f"❌ فشل الإرسال للسائق {user_id}: {e}")
-
+                    print(f"❌ فشل حقيقي في الإرسال للسائق {user_id}: {e}")
+                
+                await asyncio.sleep(0.05) 
     except Exception as e:
         print(f"❌ خطأ كارثي في قاعدة البيانات: {e}")
     finally:
