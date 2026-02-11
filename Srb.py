@@ -31,7 +31,7 @@ API_ID = os.environ.get("API_ID", "36360458")
 API_HASH = os.environ.get("API_HASH", "daae4628b4b4aac1f0ebfce23c4fa272")
 SESSION_STRING = os.environ.get("SESSION_STRING", "BAIq0QoAhqQ7maNFOf6AUKx6sP1-w-GnmTM4GCyqL0INirrOO99rgvLN38CRda5n7P4vstDSL8lBamXl5i8urauRc3Zpq54NJsBdJyNy8pqhp9KzAGDoE1Lveo78y_81h81QYcn_7NQeMQIJLM5uw3S2XPnzYif7y_LYewcx15ZY_kgKWOE4mx0YZvt4V_8h3_zSSVsAWvY3rz_H0TmknpCgczsXx6XfhW90CekcU0-nH39h9ocdtYy6uJ9cXDqsHFf45wSwL5A9tuQNRTzbwe6uIrNTWwNzz86O7jysD53YEeV2zCx625iXuoDYy3b6YJnHzgGmKRpdts7LzrGEoOanUDLYSgAAAAH-ZrzOAA")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyDvEF8WDhGt6nDWjqxgix0Rb8qaAmtEPbk")
-
+BOT_USERNAME = "Mishwariibot" 
 # ---------------------------------------------------------
 # 🛠️ [تعديل 1] قائمة المستخدمين الذين سيستلمون الطلبات
 # ضع الـ IDs الخاصة بهم هنا (أرقام فقط)
@@ -180,7 +180,7 @@ async def notify_users(detected_district, original_msg):
 
     try:
         customer = original_msg.from_user
-        bot_username = "Mishweriibot" 
+        bot_username = "Mishwariibot" 
         
         # ✅ استخدام "direct_" للسائقين المختارين لتجاوز فحص الاشتراك لاحقاً
         gateway_url = f"https://t.me/{bot_username}?start=direct_{customer.id}"
@@ -216,23 +216,18 @@ async def notify_channel(detected_district, original_msg):
     content = original_msg.text or original_msg.caption
     if not content: return
 
+    # ... الكود السابق ...
     try:
         customer = original_msg.from_user
         customer_id = customer.id if customer else 0
         
-        # --- الإعدادات ---
-        bot_username = "Mishwariibot" 
-
-        # ✅ توحيد الرابط ليستخدم "chat_" ليتوافق مع معالج start_command
-        gate_contact = f"https://t.me/{bot_username}?start=chat_{customer.id}"
+        # ✅ نستخدم المتغير العام الذي عرفناه فوق
+        gate_contact = f"https://t.me/{BOT_USERNAME}?start=chat_{customer_id}"
 
         buttons = [
-            # هذا الزر الآن يوجه لنفس المعالج الذي يفحص الاشتراك
             [InlineKeyboardButton("💬 مراسلة العميل (للمشتركين)", url=gate_contact)],
             [InlineKeyboardButton("💳 للاشتراك وتفعيل الحساب", url="https://t.me/x3FreTx")]
-        ]
-
-        keyboard = InlineKeyboardMarkup(buttons)
+        ]   keyboard = InlineKeyboardMarkup(buttons)
 
         alert_text = (
             f"🎯 <b>طلب جديد تم التقاطه!</b>\n\n"
