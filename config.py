@@ -1,5 +1,22 @@
 import re
+import os
+import psycopg2
+from psycopg2 import pool
+import asyncio
+
+# --- تعريف رابط قاعدة البيانات ---
 BOT_TOKEN = "8498451295:AAGt1R7THllSjYtEe5hvIEPnPhRkS_iBcnU"
+# نقوم بجلب الرابط من متغيرات البيئة (Environment Variables) لضمان الأمان
+DB_URL = os.environ.get("DATABASE_URL")
+
+# تصحيح الرابط ليتوافق مع مكتبة psycopg2 (خاصة عند الاستخدام مع Render/Heroku)
+if DB_URL and DB_URL.startswith("postgres://"):
+    DB_URL = DB_URL.replace("postgres://", "postgresql://", 1)
+
+# متغير عالمي للمجمع
+db_pool = None
+
+
 
 # --- 2. إعدادات الأحياء (المدينة المنورة) ---
 # تم ترتيبها وتنظيفها لضمان مطابقة أدق
@@ -115,6 +132,112 @@ def release_db_connection(conn):
         print(f"⚠️ خطأ أثناء تحرير الاتصال: {e}")
         try: conn.close() 
         except: pass
+
+
+# ==========================================
+# 3. دوال التعامل مع البيانات (Operations)
+# ==========================================
+
+async def update_db_silent(user_id, lat, lon):
+    """تحديث الموقع في الخلفية دون تعطيل البوت"""
+    conn = get_db_connection()
+    if not conn: return
+
+    try:
+        def db_task():
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE users SET lat = %s, lon = %s, last_location_update = NOW() WHERE user_id = %s",
+                    (lat, lon, user_id)
+                )
+                conn.commit()
+        
+        await asyncio.to_thread(db_task)
+    except Exception as e:
+        print(f"❌ خطأ في تحديث الموقع الخلفي: {e}")
+    finally:
+        release_db_connection(conn)
+
+def init_db():
+    """إنشاء المجمع، الجداول، وتحديث الأعمدة الناقصة"""
+    global db_pool
+    
+    # 1. إنشاء المجمع أولاً إذا لم يكن موجوداً
+    if db_pool is None:
+        try:
+            db_pool = pool.SimpleConnectionPool(
+                1, 15, # عدد الاتصالات (الأدنى والأقصى)
+                dsn=DB_URL,
+                sslmode='require'
+            )
+            print("✅ تم تجهيز مجمع اتصالات قاعدة البيانات.")
+        except Exception as e:
+            print(f"❌ فشل إنشاء المجمع: {e}")
+            return
+
+    # 2. الحصول على اتصال من المجمع المجهز
+    conn = get_db_connection()
+    if not conn: 
+        print("❌ تعذر الحصول على اتصال لتحديث الجداول.")
+        return
+
+    try:
+        with conn.cursor() as cur:
+
+            # إنشاء الجدول الأساسي
+
+            # إنشاء جدول سجلات الدردشة
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS chat_logs (
+                    log_id SERIAL PRIMARY KEY,
+                    sender_id BIGINT,
+                    receiver_id BIGINT,
+                    message_content TEXT,
+                    msg_type TEXT,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+            """)
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    user_id BIGINT PRIMARY KEY,
+                    chat_id BIGINT,
+                    role TEXT,
+                    name TEXT,
+                    phone TEXT,
+                    car_info TEXT,
+                    districts TEXT,
+                    lat FLOAT DEFAULT 0.0,
+                    lon FLOAT DEFAULT 0.0,
+                    is_blocked BOOLEAN DEFAULT FALSE,
+                    is_verified BOOLEAN DEFAULT FALSE,
+                    subscription_expiry TIMESTAMPTZ,
+                    balance FLOAT DEFAULT 0.0
+                );
+            """)
+            # التأكد من وجود عمود الرصيد (للتحديثات القديمة)
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS balance FLOAT DEFAULT 0.0;")
+            conn.commit()
+            # ... (بعد إنشاء جدول users)
+
+            # إنشاء جدول المحادثات النشطة
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS active_chats (
+                    user_id BIGINT PRIMARY KEY,
+                    partner_id BIGINT,
+                    start_time TIMESTAMPTZ DEFAULT NOW()
+                );
+            """)
+            conn.commit()
+
+            print("✅ قاعدة البيانات جاهزة.")
+    except Exception as e:
+        print(f"❌ خطأ في تهيئة قاعدة البيانات: {e}")
+    finally:
+        # هذا السطر سيعمل دائماً سواء نجح الكود أو فشل
+        # وهو الذي يضمن تحرير الاتصال للمجمع (Pool)
+        release_db_connection(conn)
+
 
 
 def normalize_text(text):
