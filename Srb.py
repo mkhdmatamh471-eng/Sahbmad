@@ -304,69 +304,40 @@ async def notify_channel(detected_district, original_msg):
 # ---------------------------------------------------------
 # 4. الرادار الرئيسي
 # ---------------------------------------------------------
-async def start_radar():
+# بدلاً من الحلقة القديمة، نستخدم Decorator لالتقاط الرسائل فور وصولها
+@user_app.on_message(filters.group & ~filters.service)
+async def handle_new_messages(client, message):
+    try:
+        text = message.text or message.caption
+        if not text or (message.from_user and message.from_user.is_self):
+            return
+
+        # التحليل بالذكاء الاصطناعي
+        is_valid = await analyze_message_hybrid(text)
+
+        if is_valid:
+            # استخراج الحي
+            found_d = "عام"
+            text_c = normalize_text(text)
+            for city, districts in CITIES_DISTRICTS.items():
+                for d in districts:
+                    if normalize_text(d) in text_c:
+                        found_d = d
+                        break
+            
+            # إرسال الطلب (البث للسائقين والقناة)
+            await broadcast_order_to_drivers(found_d, message)
+            await notify_channel(found_d, message)
+            
+    except Exception as e:
+        logging.error(f"Error handling message: {e}")
+
+# دالة التشغيل التي تضمن بقاء العميل متصلاً
+async def main_run():
     await user_app.start()
-    print("🚀 الرادار يعمل ويرسل للمستخدمين المحددين...")
-
-    # [هام] قم بإرسال رسالة تجريبية لنفسك عند التشغيل للتأكد
-    # يمكنك إزالة هذا السطر لاحقاً
-    if TARGET_USERS:
-        try:
-            await bot_sender.send_message(TARGET_USERS[0], "✅ تم تشغيل البوت بنجاح")
-        except: pass
-
-    last_processed = {}
-
-    while True:
-        try:
-            await asyncio.sleep(5) 
-
-            async for dialog in user_app.get_dialogs(limit=50):
-                # تأكد من أن الحوار هو "مجموعة" أو "سوبر جروب"
-                dialog_type = str(dialog.chat.type).upper()
-                if "GROUP" not in dialog_type and "SUPERGROUP" not in dialog_type: 
-                    continue
-
-                chat_id = dialog.chat.id
-
-                # جلب آخر رسالة
-                try:
-                    async for msg in user_app.get_chat_history(chat_id, limit=1):
-                        # تخطي الرسائل القديمة أو المعالجة مسبقاً
-                        if chat_id in last_processed and msg.id <= last_processed[chat_id]:
-                            continue
-
-                        last_processed[chat_id] = msg.id
-
-                        text = msg.text or msg.caption
-                        # تجاهل رسائل البوت نفسه أو الرسائل الفارغة
-                        if not text or (msg.from_user and msg.from_user.is_self): continue
-
-                        # التحليل
-                        is_valid_order = await analyze_message_hybrid(text)
-
-                        if is_valid_order:
-                            # استخراج الحي (اختياري)
-                            found_d = "عام"
-                            text_c = normalize_text(text)
-                            for city, districts in CITIES_DISTRICTS.items():
-                                for d in districts:
-                                    if normalize_text(d) in text_c:
-                                        found_d = d
-                                        break
-
-                            # [تعديل 3] استدعاء دالة الإرسال للمستخدمين
-                                       # ✅ [التعديل المطلوب] استدعاء الدالتين معاً
-                            await notify_users(found_d, msg)   # الإرسال للأشخاص في الخاص
-                            await notify_channel(found_d, msg) # الإرسال للقناة العامة
-
-                except Exception as e_chat:
-                    # أحياناً يحدث خطأ في قراءة مجموعة معينة، نتجاوزها
-                    continue
-
-        except Exception as e:
-            print(f"⚠️ خطأ في الدورة الرئيسية: {e}")
-            await asyncio.sleep(5)
+    print("🚀 Radar is now LIVE and listening...")
+    #保持 العميل قيد العمل دون توقف
+    await asyncio.Event().wait() 
 
 # --- خادم الويب (Health Check) ---
 app = Flask(__name__)
@@ -384,12 +355,21 @@ def run_flask():
 
 
 if __name__ == "__main__":
-    # 1. تشغيل خادم Flask في خيط منفصل (لإرضاء Render ومنع خطأ البورت)
-    threading.Thread(target=run_flask, daemon=True).start()
-    print("✅ Flask server started.")
+    # 1. تشغيل الفلاسك في خلفية منفصلة تماماً
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
 
-    # 2. تهيئة قاعدة البيانات (إذا كانت لديك دالة init_db)
-    # init_db() 
+    # 2. تهيئة القاعدة
+    try:
+        init_db()
+    except:
+        pass
 
-    # 3. تشغيل الرادار الأساسي
-    asyncio.run(start_radar())
+    # 3. تشغيل العميل بأمان
+    loop = asyncio.get_event_loop()
+    try:
+        loop.run_until_complete(main_run())
+    except KeyboardInterrupt:
+        loop.run_until_complete(user_app.stop())
+    finally:
+        loop.close()
