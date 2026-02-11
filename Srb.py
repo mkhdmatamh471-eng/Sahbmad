@@ -216,18 +216,20 @@ async def notify_channel(detected_district, original_msg):
     content = original_msg.text or original_msg.caption
     if not content: return
 
-    # ... الكود السابق ...
     try:
         customer = original_msg.from_user
         customer_id = customer.id if customer else 0
         
-        # ✅ نستخدم المتغير العام الذي عرفناه فوق
+        # التأكد من صحة الرابط
         gate_contact = f"https://t.me/{BOT_USERNAME}?start=chat_{customer_id}"
 
+        # إعداد الأزرار بشكل منظم
         buttons = [
-            [InlineKeyboardButton("💬 مراسلة العميل (للمشتركين)", url=gate_contact)],
             [InlineKeyboardButton("💳 للاشتراك وتفعيل الحساب", url="https://t.me/x3FreTx")]
-        ]   keyboard = InlineKeyboardMarkup(buttons)
+        ]
+        
+        # ✅ هذا السطر يجب أن يكون في سطر جديد وبنفس مستوى الإزاحة
+        keyboard = InlineKeyboardMarkup(buttons)
 
         alert_text = (
             f"🎯 <b>طلب جديد تم التقاطه!</b>\n\n"
