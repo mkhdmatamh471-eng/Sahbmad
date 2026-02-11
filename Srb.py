@@ -223,7 +223,11 @@ async def broadcast_order_to_drivers(detected_district, original_msg):
     try:
         with conn.cursor() as cur:
             # جلب كل السائقين الذين لم يتم حظرهم
-            cur.execute("SELECT user_id, subscription_expiry FROM users WHERE is_blocked = FALSE")
+            cur.execute("""
+                SELECT user_id, subscription_expiry 
+                FROM users 
+                WHERE is_blocked = FALSE AND role = 'driver'
+            """)
             drivers = cur.fetchall()
 
             for user_id, expiry in drivers:
@@ -347,8 +351,13 @@ async def handle_new_messages(client, message):
 # دالة التشغيل التي تضمن بقاء العميل متصلاً
 async def main_run():
     await user_app.start()
+    print("🔄 جاري مزامنة المحادثات (Syncing Dialogs)...")
+    
+    # هذه الحلقة تمر على أول 100 محادثة لتخزين بيانات الـ Peers
+    async for dialog in user_app.get_dialogs(limit=100):
+        pass # فقط للمزامنة
+        
     print("🚀 Radar is now LIVE and listening...")
-    #保持 العميل قيد العمل دون توقف
     await asyncio.Event().wait() 
 
 # --- خادم الويب (Health Check) ---
