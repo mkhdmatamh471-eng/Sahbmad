@@ -55,7 +55,7 @@ generation_config = {
   "max_output_tokens": 5,
 }
 ai_model = genai.GenerativeModel(
-  model_name="gemini-1.5-flash",
+  model_name="gemini-1.5-flash-latest", # أضف -latest هنا
   generation_config=generation_config,
 )
 
