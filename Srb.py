@@ -189,85 +189,67 @@ def manual_fallback_check(clean_text):
 # ---------------------------------------------------------
 
 async def broadcast_order_to_drivers(detected_district, original_msg):
-    """
-    توزيع الطلب على جميع السائقين في قاعدة البيانات.
-    المشترك: يصله زر التواصل.
-    غير المشترك: يصله الطلب بدون زر التواصل.
-    """
+    print("🚀 بدأت دالة البث للسائقين الآن...") # تنبيه للتشخيص
     content = original_msg.text or original_msg.caption
     customer = original_msg.from_user
     
-    if not content or not customer: return
+    if not content or not customer: 
+        print("❌ محتوى الرسالة أو العميل غير موجود")
+        return
 
-    # 1. تجهيز رابط التواصل (Direct Link)
-    if customer.username:
-        contact_url = f"https://t.me/{customer.username}"
-    else:
-        contact_url = f"tg://user?id={customer.id}"
+    # تجهيز الروابط
+    contact_url = f"https://t.me/{customer.username}" if customer.username else f"tg://user?id={customer.id}"
 
-    # 2. نص الرسالة الأساسي (احترافي ومنظم)
-    base_text = (
-        f"🎯 <b>طلب مشوار جديد</b>\n\n"
-        f"📍 <b>المنطقة:</b> {detected_district}\n"
-        f"👤 <b>العميل:</b> {customer.first_name}\n"
-        f"📝 <b>التفاصيل:</b>\n<i>{content}</i>\n"
-        f"━━━━━━━━━━━━━━\n"
-    )
-
-    # 3. استخدام اتصال قاعدة البيانات المستورد من config
     conn = get_db_connection()
     if not conn: 
-        print("❌ فشل الاتصال بقاعدة البيانات أثناء البث")
+        print("❌ فشل الاتصال بقاعدة البيانات (المشكلة هنا!)")
         return
 
     try:
         with conn.cursor() as cur:
-            # جلب كل السائقين الذين لم يتم حظرهم
+            print("🔍 جاري البحث عن السائقين في قاعدة البيانات...")
+            # تأكد من أن كلمة driver مكتوبة صغيرة في قاعدة البيانات
             cur.execute("""
                 SELECT user_id, subscription_expiry 
                 FROM users 
                 WHERE is_blocked = FALSE AND role = 'driver'
             """)
             drivers = cur.fetchall()
+            print(f"👥 عدد السائقين الذين تم العثور عليهم: {len(drivers)}")
+
+            if not drivers:
+                print("⚠️ لم يتم العثور على أي سائق مسجل بدقة 'driver' وغير محظور")
+                return
 
             for user_id, expiry in drivers:
-                # التحقق من صلاحية الاشتراك (مع مراعاة المنطقة الزمنية UTC)
+                print(f"📤 محاولة الإرسال للسائق: {user_id}")
                 is_active = False
                 if expiry:
-                    # نستخدم timezone-aware comparison لتجنب أخطاء النوع
-                    now = datetime.now(expiry.tzinfo if expiry.tzinfo else timezone.utc)
-                    if expiry > now:
-                        is_active = True
+                    now = datetime.now(timezone.utc)
+                    is_active = (expiry > now)
 
-                # بناء لوحة الأزرار (Keyboard) بناءً على الحالة
-                if is_active:
-                    keyboard = InlineKeyboardMarkup([
-                        [InlineKeyboardButton("💬 مراسلة العميل مباشرة", url=contact_url)]
-                    ])
-                    msg_footer = "✅ <b>اشتراكك فعال - تواصل الآن</b>"
-                else:
-                    keyboard = InlineKeyboardMarkup([
-                        [InlineKeyboardButton("💳 اشترك لتفعيل زر المراسلة", url="https://t.me/x3FreTx")]
-                    ])
-                    msg_footer = "⚠️ <b>التواصل متاح للمشتركين فقط</b>"
+                kb = InlineKeyboardMarkup([[InlineKeyboardButton("💬 مراسلة العميل", url=contact_url)]]) if is_active else \
+                     InlineKeyboardMarkup([[InlineKeyboardButton("💳 اشترك للتواصل", url="https://t.me/x3FreTx")]])
+                
+                footer = "✅ اشتراك فعال" if is_active else "⚠️ التواصل للمشتركين فقط"
 
                 try:
                     await bot_sender.send_message(
                         chat_id=user_id,
-                        text=base_text + msg_footer,
-                        reply_markup=keyboard,
+                        text=f"🎯 <b>طلب جديد في {detected_district}</b>\n\n{content}\n\n{footer}",
+                        reply_markup=kb,
                         parse_mode=ParseMode.HTML
                     )
-                    # تأخير بسيط جداً (50 مللي ثانية) لتجنب حظر تليجرام عند كثرة السائقين
+                    print(f"✅ تم الإرسال بنجاح للسائق {user_id}")
                     await asyncio.sleep(0.05) 
                 except Exception as e:
-                    # تخطي إذا قام المستخدم بحظر البوت أو حذف حسابه
-                    continue 
+                    print(f"❌ فشل الإرسال للسائق {user_id}: {e}")
 
     except Exception as e:
-        print(f"❌ خطأ كارثي في عملية البث: {e}")
+        print(f"❌ خطأ كارثي في قاعدة البيانات: {e}")
     finally:
         release_db_connection(conn)
+        print("🔌 تم إغلاق اتصال قاعدة البيانات.")
 
 async def notify_channel(detected_district, original_msg):
     content = original_msg.text or original_msg.caption
@@ -349,12 +331,13 @@ async def handle_new_messages(client, message):
                         found_d = d
                         break
             
-            # إرسال الطلب (البث للسائقين والقناة)
-               # إرسال الطلب (البث للسائقين والقناة)
-            print(f"🎯 طلب حقيقي مكتشف! جاري الإرسال للسائقين...")
-            await broadcast_order_to_drivers(found_d, message)
-            await notify_channel(found_d, message)
+            # --- التعديل الجوهري للسرعة ---
+            # تشغيل الإرسال للسائقين وللقناة في نفس اللحظة دون انتظار أحدهما للآخر
+            asyncio.create_task(broadcast_order_to_drivers(found_d, message))
+            asyncio.create_task(notify_channel(found_d, message))
             
+            print(f"⚡ تم إطلاق مهام الإرسال الفوري لـ {found_d}")
+
     except Exception as e:
         logging.error(f"Error handling message: {e}")
 
