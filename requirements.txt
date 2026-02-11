@@ -4,3 +4,4 @@ python-telegram-bot
 google-generativeai
 psycopg2-binary
 httpx
+flask
