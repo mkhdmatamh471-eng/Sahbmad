@@ -10,6 +10,8 @@ from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 import google.generativeai as genai
 from datetime import datetime
+from flask import Flask  # أضف هذا السطر
+import threading
 
 # --- إعداد السجلات ---
 logging.basicConfig(level=logging.INFO)
@@ -367,18 +369,27 @@ async def start_radar():
             await asyncio.sleep(5)
 
 # --- خادم الويب (Health Check) ---
-class HealthCheckHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"Bot is Sending to Users Direct Message")
-    def log_message(self, format, *args): return
+app = Flask(__name__)
 
-def run_health_server():
+@app.route('/')
+def home():
+    # هذه الرسالة ستظهر عند فتح رابط البوت على المتصفح
+    return "Bot is Running Live!", 200
+
+def run_flask():
+    # Render يمرر المنفذ تلقائياً عبر متغير البيئة PORT
     port = int(os.environ.get("PORT", 10000))
-    httpd = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
-    httpd.serve_forever()
+    # تشغيل الفلاسك على 0.0.0.0 ضروري ليعمل على السيرفر
+    app.run(host='0.0.0.0', port=port)
+
 
 if __name__ == "__main__":
-    threading.Thread(target=run_health_server, daemon=True).start()
+    # 1. تشغيل خادم Flask في خيط منفصل (لإرضاء Render ومنع خطأ البورت)
+    threading.Thread(target=run_flask, daemon=True).start()
+    print("✅ Flask server started.")
+
+    # 2. تهيئة قاعدة البيانات (إذا كانت لديك دالة init_db)
+    # init_db() 
+
+    # 3. تشغيل الرادار الأساسي
     asyncio.run(start_radar())
