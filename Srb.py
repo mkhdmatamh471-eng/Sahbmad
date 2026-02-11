@@ -323,6 +323,14 @@ async def notify_channel(detected_district, original_msg):
 # بدلاً من الحلقة القديمة، نستخدم Decorator لالتقاط الرسائل فور وصولها
 @user_app.on_message(filters.group & ~filters.service)
 async def handle_new_messages(client, message):
+
+
+    # --- [التعديل هنا] ---
+    # هذا السطر سيطبع أي رسالة تصل للرادار في السجل (Logs) للتأكد من أنه يرى الجروب
+    chat_title = message.chat.title or "جروب غير معروف"
+    print(f"📥 الرادار استلم رسالة من [{chat_title}] - المحتوى: {message.text or 'وسائط'}")
+    # ---------------------
+
     try:
         text = message.text or message.caption
         if not text or (message.from_user and message.from_user.is_self):
@@ -342,6 +350,8 @@ async def handle_new_messages(client, message):
                         break
             
             # إرسال الطلب (البث للسائقين والقناة)
+               # إرسال الطلب (البث للسائقين والقناة)
+            print(f"🎯 طلب حقيقي مكتشف! جاري الإرسال للسائقين...")
             await broadcast_order_to_drivers(found_d, message)
             await notify_channel(found_d, message)
             
