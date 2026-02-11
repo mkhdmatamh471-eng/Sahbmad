@@ -346,14 +346,16 @@ async def handle_new_messages(client, message):
 # دالة التشغيل التي تضمن بقاء العميل متصلاً
 async def main_run():
     await user_app.start()
-    print("🔄 جاري مزامنة المحادثات (Syncing Dialogs)...")
+    print("🔄 جاري فحص ومزامنة جميع المجموعات... قد يستغرق ذلك لحظات")
     
-    # هذه الحلقة تمر على أول 100 محادثة لتخزين بيانات الـ Peers
-    async for dialog in user_app.get_dialogs(limit=100):
-        pass # فقط للمزامنة
-        
-    print("🚀 Radar is now LIVE and listening...")
-    await asyncio.Event().wait() 
+    # تغيير limit=None سيجعل البوت يمر على كل القروبات المشترك بها
+    async for dialog in user_app.get_dialogs(limit=None):
+        if dialog.chat.type in [enums.ChatType.GROUP, enums.ChatType.SUPERGROUP]:
+            # هذه الخطوة تجبر الحساب على التعرف على الآيدي الخاص بالجروب
+            pass 
+            
+    print("🚀 الرادار الآن يراقب جميع المجموعات بنجاح...")
+    await asyncio.Event().wait()
 
 # --- خادم الويب (Health Check) ---
 app = Flask(__name__)
