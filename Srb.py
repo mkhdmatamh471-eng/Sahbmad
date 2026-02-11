@@ -189,71 +189,69 @@ def manual_fallback_check(clean_text):
 # ---------------------------------------------------------
 
 async def broadcast_order_to_drivers(detected_district, original_msg):
-    print("🚀 بدأت دالة البث للسائقين الآن...") # تنبيه للتشخيص
+    print("📢 بدأت محاولة الإرسال للسائقين...")
     content = original_msg.text or original_msg.caption
     customer = original_msg.from_user
     
-    if not content or not customer: 
-        print("❌ محتوى الرسالة أو العميل غير موجود")
-        return
+    if not customer: return
 
-    # تجهيز الروابط
+    # 1. تجهيز الروابط والمعلومات الأساسية (خارج الحلقة)
     contact_url = f"https://t.me/{customer.username}" if customer.username else f"tg://user?id={customer.id}"
+    
+    # تعريف base_text هنا ليكون متاحاً لجميع العمليات بالأسفل
+    base_text = (
+        f"🎯 <b>طلب مشوار جديد</b>\n"
+        f"📍 الحي: {detected_district}\n"
+        f"👤 العميل: {customer.first_name}\n"
+        f"📝 التفاصيل: {content}\n"
+    )
 
     conn = get_db_connection()
-    if not conn: 
-        print("❌ فشل الاتصال بقاعدة البيانات (المشكلة هنا!)")
+    if not conn:
+        print("❌ فشل الاتصال بالقاعدة")
         return
 
     try:
         with conn.cursor() as cur:
-            print("🔍 جاري البحث عن السائقين في قاعدة البيانات...")
-            # تأكد من أن كلمة driver مكتوبة صغيرة في قاعدة البيانات
             cur.execute("""
                 SELECT user_id, subscription_expiry 
                 FROM users 
-                WHERE is_blocked = FALSE AND role = 'driver'
+                WHERE is_blocked = FALSE AND TRIM(LOWER(role)) = 'driver'
             """)
             drivers = cur.fetchall()
-            print(f"👥 عدد السائقين الذين تم العثور عليهم: {len(drivers)}")
-
-            if not drivers:
-                print("⚠️ لم يتم العثور على أي سائق مسجل بدقة 'driver' وغير محظور")
-                return
+            
+            print(f"👥 تم العثور على {len(drivers)} سائق")
 
             for user_id, expiry in drivers:
-                print(f"📤 محاولة الإرسال للسائق: {user_id}")
                 is_active = False
                 if expiry:
+                    # تأكد أنك أضفت 'from datetime import timezone' في أعلى الملف
                     now = datetime.now(timezone.utc)
                     is_active = (expiry > now)
 
                 kb = InlineKeyboardMarkup([[InlineKeyboardButton("💬 مراسلة العميل", url=contact_url)]]) if is_active else \
-                     InlineKeyboardMarkup([[InlineKeyboardButton("💳 اشترك للتواصل", url="https://t.me/x3FreTx")]])
+                     InlineKeyboardMarkup([[InlineKeyboardButton("💳 اشترك لتفعيل المراسلة", url="https://t.me/x3FreTx")]])
                 
-                footer = "✅ اشتراك فعال" if is_active else "⚠️ التواصل للمشتركين فقط"
+                footer = "✅ اشتراكك فعال" if is_active else "⚠️ التواصل للمشتركين فقط"
 
-                
-                # --- إصلاح إزاحة بلوك الإرسال ---
                 try:
-                    # أضفنا disable_notification=False للتأكد من إصدار صوت تنبيه عند السائق
                     await bot_sender.send_message(
                         chat_id=int(user_id),
                         text=base_text + footer,
                         reply_markup=kb,
                         parse_mode=ParseMode.HTML,
-                        disable_notification=False 
+                        disable_notification=False
                     )
-                    print(f"✅ تم تأكيد التسليم تقنياً للسائق: {user_id}")
+                    print(f"✅ تم تأكيد التسليم للسائق: {user_id}")
                 except Exception as e:
                     print(f"❌ فشل حقيقي في الإرسال للسائق {user_id}: {e}")
                 
-                await asyncio.sleep(0.05) 
+                await asyncio.sleep(0.05)
+
     except Exception as e:
-        print(f"❌ خطأ كارثي في قاعدة البيانات: {e}")
+        print(f"❌ خطأ كارثي: {e}")
     finally:
         release_db_connection(conn)
-        print("🔌 تم إغلاق اتصال قاعدة البيانات.")
 
 async def notify_channel(detected_district, original_msg):
     content = original_msg.text or original_msg.caption
