@@ -3,7 +3,7 @@ import threading
 import sys
 import os
 import logging
-import re  
+import re   
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pyrogram import Client, filters 
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
@@ -27,25 +27,24 @@ except Exception as e:
     sys.exit(1)
 
 # --- متغيرات البيئة ---
-API_ID = os.environ.get("API_ID", "33888256")
-API_HASH = os.environ.get("API_HASH", "bb1902689a7e203a7aedadb806c08854")
-SESSION_STRING = os.environ.get("SESSION_STRING", "BAIFGAAAWH0qADVIqGjuDmtifoW-SQxSznz5ZhQjTbbPT2_wrX7IXCv95zqwku9kG4rpIf_xv3IDkt7CFUETnMEtUIff39Po9PwGgsiivLE1Mrbs6Ymw-h7qQap0oxSpSuIVRzWQT8_DWRJ8NGcTtp8VOJrZ7tjvjDMuVouYYd5ZmGNKry7QCQSRZuNCxc29IUC_eirR4KJKwC5IV1Ve5_Jq3PYYr8nsmiEvYauzrwftmivipkmg9CDyQfVxBfJmKi9WJuWQVvTqJWeIYYkBFLJmkcjOAKsej9fqzD4laRJIsKXaVxgfwmX5STeBpjBI7EPlMn9v0UvKQT49rYNQer0UyRSUWAAAAAH9nH9OAA")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyDtF2lEZuEvI1hTFFrPRbGwwvj7ZocdPjs")
+API_ID = os.environ.get("API_ID", "36360458")
+API_HASH = os.environ.get("API_HASH", "daae4628b4b4aac1f0ebfce23c4fa272")
+SESSION_STRING = os.environ.get("SESSION_STRING", "BAIq0QoAhqQ7maNFOf6AUKx6sP1-w-GnmTM4GCyqL0INirrOO99rgvLN38CRda5n7P4vstDSL8lBamXl5i8urauRc3Zpq54NJsBdJyNy8pqhp9KzAGDoE1Lveo78y_81h81QYcn_7NQeMQIJLM5uw3S2XPnzYif7y_LYewcx15ZY_kgKWOE4mx0YZvt4V_8h3_zSSVsAWvY3rz_H0TmknpCgczsXx6XfhW90CekcU0-nH39h9ocdtYy6uJ9cXDqsHFf45wSwL5A9tuQNRTzbwe6uIrNTWwNzz86O7jysD53YEeV2zCx625iXuoDYy3b6YJnHzgGmKRpdts7LzrGEoOanUDLYSgAAAAH-ZrzOAA")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyDvEF8WDhGt6nDWjqxgix0Rb8qaAmtEPbk")
 
 # ---------------------------------------------------------
 # 🛠️ [تعديل 1] قائمة المستخدمين الذين سيستلمون الطلبات
 # ضع الـ IDs الخاصة بهم هنا (أرقام فقط)
 # ---------------------------------------------------------
 # 🛠️ قائمة الـ IDs المحدثة الذين سيستلمون الطلبات في الخاص (مفتوحة)
-CHANNEL_ID = -1003843717541 
+TARGET_USERS = [
+    8563113166, 7897973056, 8123777916, 8181237063, 8246402319, 
+    6493378017, 7068172120, 1658903455, 1506018292, 1193267455, 
+    627214092, 336092598, 302374285, 987654321
+]
  # <--- ضع الآيديات الحقيقية هنا
 
-TARGET_USERS = [
-    7996171713, 7513630480, 669659550, 6813059801, 632620058, 7093887960, 8024679997
-]
-
-
-
+CHANNEL_ID = -1003763324430 
 
 # --- إعداد Gemini 1.5 Flash ---
 genai.configure(api_key=GEMINI_API_KEY)
@@ -122,38 +121,44 @@ async def analyze_message_hybrid(text):
     if re.search(route_pattern, clean_text):
         return True 
 
-    # 4. إذا تجاوزت الفلاتر أعلاه، نرسلها للذكاء الاصطناعي كخيار أخير
+        # البرومبت الشامل (The Master Prompt)
     prompt = f"""
-    Analyze if this is a CUSTOMER looking for a taxi/ride in Madinah.
-    Reply ONLY with 'YES' or 'NO'.
-    Text: "{text}"
-    """
-    try:
-        response = await asyncio.to_thread(ai_model.generate_content, prompt)
-        result = response.text.strip().upper().replace(".", "")
-        return "YES" in result
-    except Exception as e:
-        return manual_fallback_check(clean_text)
-    # البرومبت الشامل المحدث لمدينة جدة
-    prompt = f"""
-    Role: You are an elite AI Traffic Controller for a 'Jeddah Taxi & Delivery' Telegram group.
-    Objective: Filter messages to identify REAL CUSTOMERS seeking services in Jeddah.
+    Role: You are an elite AI Traffic Controller for a specific 'Madinah Taxi & Delivery' Telegram group.
+    Objective: Filter messages to identify REAL CUSTOMERS seeking services (Rides, Delivery, School Transport).
     
     [STRICT ANALYSIS RULES]
-    Identify if the SENDER is a CUSTOMER needing a ride or delivery in Jeddah.
+    You must classify the "Intent" of the sender.
+    - SENDER = CUSTOMER (Needs service) -> Reply 'YES'
+    - SENDER = DRIVER (Offers service) -> Reply 'NO'
+    - SENDER = SPAM/CHATTER -> Reply 'NO'
 
-    [✅ CLASSIFY AS 'YES' (JEDDAH CUSTOMER REQUESTS)]
-    1. Explicit Ride Requests: (e.g., "أبغى سواق بجدة", "مطلوب كابتن", "سيارة للمطار", "مين يوديني الكورنيش؟").
-    2. Route Descriptions: Mentioning Jeddah areas (e.g., "من السامر للتحلية", "مشوار من أبحر للبلد", "إلى رد سي مول").
-    3. Location Pings: (e.g., "أحد حول حي المنار؟", "في كباتن في الحمدانية؟", "حي السلامة؟").
-    4. Delivery: (e.g., "توصيل غرض من المطار", "مندوب لحي الصفا").
+    [✅ CLASSIFY AS 'YES' (CUSTOMER REQUESTS)]
+    1. Explicit Ride Requests: (e.g., "أبغى سواق", "مطلوب كابتن", "سيارة للحرم", "مين يوديني؟").
+    2. Route Descriptions (Implicit): Text mentioning a destination or path (e.g., "من العزيزية للحرم", "مشوار للمطار", "إلى الراشد مول").
+    3. Location Pings (Incomplete Requests): If someone just names a location implies they need a driver there (e.g., "حي شوران؟", "أحد حول العالية؟", "في كباتن في الهجرة؟").
+    4. School & Monthly Contracts: (e.g., "توصيل مدارس", "نقل طالبات", "عقد شهري", "توصيل دوام").
+    5. Delivery & Logistics: Requests to move items (e.g., "توصيل غرض", "توصيل مفتاح", "طلبية من زاجل", "توصيل أكل").
+    6. Price Inquiries by Customer: (e.g., "بكم المشوار للمطار؟", "توديني بـ 20؟").
 
-    [❌ CLASSIFY AS 'NO']
-    Ignore Driver offers ("شغال الآن", "سيارة نظيفة") or Spams.
+    [❌ CLASSIFY AS 'NO' (IGNORE THESE)]
+    1. Driver Offers (Supply): Any text indicating the sender IS a driver (e.g., "متواجد", "جاهز للتوصيل", "سيارة حديثة", "توصيل مشاوير", "على مدار الساعة", "الخاص مفتوح").
+    2. Social & Religious: Greetings, prayers, wisdom (e.g., "صباح الخير", "جمعة مباركة", "سبحان الله", "دعاء", "حكم").
+    3. Forbidden Spam Topics: 
+       - Medical Excuses (e.g., "سكليف", "عذر طبي", "اجازة مرضية").
+       - Marriage/Social (e.g., "خطابة", "زواج مسيار", "تعارف").
+       - Financial/Real Estate (e.g., "قروض", "أرض للبيع", "استثمار").
+    4. General Chat/Admin: Questions about rules, links, or weather.
 
-    [📍 JEDDAH CONTEXT KNOWLEDGE]
-    Valid Jeddah locations: 
-    (Al-Safa, Al-Samer, Al-Hamdania, Obhur, Al-Rawdah, Al-Salama, Al-Zahra, Al-Balad, Al-Baghdadia, Al-Rehab, Al-Marwah, Red Sea Mall, Jeddah Park, Airport T1).
+    [📍 MADINAH CONTEXT KNOWLEDGE]
+    Treat these as valid locations implying a request if mentioned alone:
+    (Haram, Airport, Train Station, Aziziya, Shoran, Awali, Hijra, Baqdo, Quba, Sultana, Rashid Mall, Al-Noor, Taiba).
+
+    [DECISION LOGIC]
+    - "From A to B" -> YES
+    - "I am available" -> NO
+    - "School delivery needed" -> YES
+    - "Sick leave for sale" -> NO
+    - "Who is in Shoran?" -> YES
 
     Input Text: "{text}"
 
@@ -165,9 +170,8 @@ async def analyze_message_hybrid(text):
         result = response.text.strip().upper().replace(".", "")
         return "YES" in result
     except Exception as e:
-        print(f"⚠️ تجاوز AI: {e}")
+        print(f"⚠️ تجاوز AI (فشل الاتصال): {e}")
         return manual_fallback_check(clean_text)
-
 
 def manual_fallback_check(clean_text):
     order_words = ["ابي", "ابغي", "محتاج", "نبي", "مطلوب", "بكم"]
@@ -186,17 +190,10 @@ async def notify_users(detected_district, original_msg):
 
     try:
         customer = original_msg.from_user
-        # ✅ التحقق من وجود العميل لتجنب انهيار الكود
-        if not customer or not customer.id:
-            print("⚠️ تعذر جلب ID العميل، سيتم تخطي الإرسال.")
-            return
-
-        # ✅ تأكد من اليوزر الصحيح (Mishweriibot أم Mishwariibot)
         bot_username = "Mishweriibot" 
         
-        # ✅ استخدام متغير محمي للآيدي
-        customer_id = customer.id
-        gateway_url = f"https://t.me/{bot_username}?start=direct_{customer_id}"
+        # ✅ استخدام "direct_" للسائقين المختارين لتجاوز فحص الاشتراك لاحقاً
+        gateway_url = f"https://t.me/{bot_username}?start=direct_{customer.id}"
 
         buttons_list = [
             [InlineKeyboardButton("💬 مراسلة العميل الآن", url=gateway_url)],
@@ -204,15 +201,13 @@ async def notify_users(detected_district, original_msg):
 
         keyboard = InlineKeyboardMarkup(buttons_list)
 
-        # ✅ تنسيق النص
         alert_text = (
             f"🎯 <b>طلب جديد تم التقاطه!</b>\n\n"
             f"📍 <b>المنطقة:</b> {detected_district}\n"
-            f"👤 <b>اسم العميل:</b> {customer.first_name}\n"
+            f"👤 <b>اسم العميل:</b> {customer.first_name if customer else 'مخفي'}\n"
             f"📝 <b>نص الطلب:</b>\n<i>{content}</i>"
         )
 
-        # ✅ إرسال الرسائل للمستخدمين المحددين
         for user_id in TARGET_USERS:
             try:
                 await bot_sender.send_message(
@@ -225,7 +220,7 @@ async def notify_users(detected_district, original_msg):
                 print(f"⚠️ فشل الإرسال للمستخدم {user_id}: {e_user}")
 
     except Exception as e:
-        print(f"❌ خطأ عام في دالة الإرسال للمستخدمين: {e}")
+        print(f"❌ خطأ عام في دالة الإرسال: {e}")
 
 async def notify_channel(detected_district, original_msg):
     content = original_msg.text or original_msg.caption
@@ -233,24 +228,26 @@ async def notify_channel(detected_district, original_msg):
 
     try:
         customer = original_msg.from_user
-        if not customer: return
+        customer_id = customer.id if customer else 0
+        
+        # --- الإعدادات ---
+        bot_username = "Mishwariibot" 
 
-        # ✅ إنشاء رابط المراسلة المباشر مع الراكب (بدور وسيط)
-        # سيفتح حساب الراكب فوراً عند ضغط السائق
-        direct_url = f"tg://user?id={customer.id}"
+        # ✅ توحيد الرابط ليستخدم "chat_" ليتوافق مع معالج start_command
+        gate_contact = f"https://t.me/{bot_username}?start=chat_{customer.id}"
 
         buttons = [
-            [InlineKeyboardButton("💬 مراسلة العميل مباشرة", url=direct_url)],
-            [InlineKeyboardButton("💳 للاشتراك وتفعيل الحساب", url="https://t.me/Servecestu")]
+            # هذا الزر الآن يوجه لنفس المعالج الذي يفحص الاشتراك
+            [InlineKeyboardButton("💬 مراسلة العميل (للمشتركين)", url=gate_contact)],
+            [InlineKeyboardButton("💳 للاشتراك وتفعيل الحساب", url="https://t.me/x3FreTx")]
         ]
 
         keyboard = InlineKeyboardMarkup(buttons)
 
-        # ✅ نص الرسالة بدون وقت ومع إزاحة مضبوطة
         alert_text = (
             f"🎯 <b>طلب جديد تم التقاطه!</b>\n\n"
             f"📍 <b>المنطقة:</b> {detected_district}\n"
-            f"👤 <b>اسم العميل:</b> {customer.first_name}\n"
+            f"👤 <b>اسم العميل:</b> {customer.first_name if customer else 'مخفي'}\n"
             f"📝 <b>نص الطلب:</b>\n<i>{content}</i>"
         )
 
@@ -260,10 +257,71 @@ async def notify_channel(detected_district, original_msg):
             reply_markup=keyboard,
             parse_mode=ParseMode.HTML
         )
-        print(f"✅ تم الإرسال للقناة برابط مباشر: {detected_district}")
+        print(f"✅ تم الإرسال للقناة برابط موحد (chat_): {detected_district}")
 
     except Exception as e:
         print(f"❌ خطأ إرسال للقناة: {e}")
+
+
+# --- كلاس ودالة خادم الصحة (Health Check) ---
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is Running")
+    
+    # لإيقاف ظهور سجلات الخادم المزعجة في التيرمينال
+    def log_message(self, format, *args): 
+        return
+
+def run_health_server():
+    # نستخدم البورت الذي يحدده Render أو 10000 كاحتياطي
+    port = int(os.environ.get("PORT", 10000))
+    print(f"🌍 تشغيل خادم الصحة على المنفذ: {port}")
+    httpd = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
+    httpd.serve_forever()
+
+# ---------------------------------------------------------
+# 4. الرادار الرئيسي
+# ---------------------------------------------------------
+# --- [تطوير] معالج الرسائل الجديد (المستمع) ---
+# هذا المعالج سيعمل تلقائياً عند وصول أي رسالة في المجموعات المشترك بها اليوزر بوت
+@user_app.on_message(filters.group & ~filters.me)
+async def message_handler(client, msg):
+    try:
+        text = msg.text or msg.caption
+        if not text or len(text) < 5:
+            return
+
+        # 1. التحليل الأولي السريع (قبل استهلاك AI) لتوفير الموارد
+        clean_text = normalize_text(text)
+        
+        # تخطي الرسائل التي تحتوي على كلمات محظورة فوراً
+        if any(k in clean_text for k in BLOCK_KEYWORDS) or any(k in clean_text for k in IRRELEVANT_TOPICS):
+            return
+
+        # 2. التحليل الهجين (Hybrid)
+        is_valid_order = await analyze_message_hybrid(text)
+
+        if is_valid_order:
+            # استخراج الحي
+            found_d = "عام"
+            text_c = normalize_text(text)
+            for city, districts in CITIES_DISTRICTS.items():
+                for d in districts:
+                    if normalize_text(d) in text_c:
+                        found_d = d
+                        break
+
+            # 3. إرسال الإشعارات
+            # نستخدم create_task لضمان عدم توقف الرادار أثناء الإرسال
+            asyncio.create_task(notify_users(found_d, msg))
+            asyncio.create_task(notify_channel(found_d, msg))
+            
+            logging.info(f"✅ تم التقاط طلب جديد: {found_d}")
+
+    except Exception as e:
+        logging.error(f"⚠️ خطأ في معالجة الرسالة: {e}")
 
 
 # --- [تطوير] معالج الرسائل الذكي ---
@@ -297,11 +355,7 @@ async def message_handler(client, msg):
     except Exception as e:
         logging.error(f"⚠️ خطأ في معالجة الرسالة: {e}")
 
-# ---------------------------------------------------------
-# 4. الرادار الرئيسي
-# ---------------------------------------------------------
-# --- [تطوير] معالج الرسائل الجديد (المستمع) ---
-# هذا المعالج سيعمل تلقائياً عند وصول أي رسالة في المجموعات المشترك بها اليوزر بوت
+# --- [تطوير] دالة التشغيل الرئيسية الموفرة للطاقة ---
 # تأكد من استيراد ChatType في بداية الملف إذا لم يكن موجوداً
 
 async def start_radar():
@@ -331,23 +385,6 @@ async def start_radar():
         if user_app.is_connected:
             await user_app.stop()
 
-# --- كلاس ودالة خادم الصحة (Health Check) ---
-class HealthCheckHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"Bot is Running")
-    
-    # لإيقاف ظهور سجلات الخادم المزعجة في التيرمينال
-    def log_message(self, format, *args): 
-        return
-
-def run_health_server():
-    # نستخدم البورت الذي يحدده Render أو 10000 كاحتياطي
-    port = int(os.environ.get("PORT", 10000))
-    print(f"🌍 تشغيل خادم الصحة على المنفذ: {port}")
-    httpd = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
-    httpd.serve_forever()
 
 # --- التشغيل الرئيسي ---
 if __name__ == "__main__":
