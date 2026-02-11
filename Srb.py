@@ -21,12 +21,22 @@ logging.getLogger("pyrogram").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 # --- استيراد الإعدادات ---
+# --- استيراد الإعدادات ودوال القاعدة ---
 try:
-    from config import normalize_text, CITIES_DISTRICTS, BOT_TOKEN
-    print("✅ تم تحميل الإعدادات بنجاح")
+    # أضف get_db_connection و release_db_connection هنا
+    from config import (
+        normalize_text, 
+        CITIES_DISTRICTS, 
+        BOT_TOKEN, 
+        get_db_connection, 
+        release_db_connection,
+        init_db  # إذا كنت تستدعيها في الأسفل
+    )
+    print("✅ تم تحميل الإعدادات ودوال قاعدة البيانات بنجاح")
 except Exception as e:
     print(f"❌ خطأ في تحميل ملف config.py: {e}")
     sys.exit(1)
+
 
 # --- متغيرات البيئة ---
 API_ID = os.environ.get("API_ID", "36360458")
