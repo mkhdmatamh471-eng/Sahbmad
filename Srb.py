@@ -364,7 +364,7 @@ async def start_radar():
 
         except Exception as e:
             print(f"⚠️ خطأ في الدورة الرئيسية: {e}")
-            await asyncio.sleep(5)
+            await asyncio.sleep(10)
 
 # --- خادم الويب (Health Check) ---
 class HealthCheckHandler(BaseHTTPRequestHandler):
