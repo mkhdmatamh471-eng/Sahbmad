@@ -101,64 +101,43 @@ IRRELEVANT_TOPICS = [
 # 2. المحرك الهجين (Hybrid Engine)
 # ---------------------------------------------------------
 async def analyze_message_hybrid(text):
-    if not text or len(text) < 5 or len(text) > 400: return False
+    if not text or len(text) < 5 or len(text) > 400: 
+        return False
 
-    # 1. تنظيف النص من الزخارف والمسافات (لصيد الكلمات المقطعة)
     clean_text = normalize_text(text)
     
-    # 2. [هام جداً] الفحص الصارم للكلمات المحظورة (القتل الفوري)
-    # إذا وجدت أي كلمة من "سكليف" أو "طبي" أو "إعلان"، نرفض الرسالة فوراً ولن نرسلها للـ AI
-    if any(k in clean_text for k in BLOCK_KEYWORDS): 
-        print(f"🚫 تم حظر الرسالة فوراً (كلمة محظورة من BLOCK_KEYWORDS)")
-        return False
-        
-    if any(k in clean_text for k in IRRELEVANT_TOPICS): 
-        print(f"🚫 تم حظر الرسالة فوراً (موضوع طبي/غير صلة)")
+    # 1. الفلترة الفورية (الكلمات المحظورة)
+    if any(k in clean_text for k in BLOCK_KEYWORDS + IRRELEVANT_TOPICS): 
         return False
 
-    # 3. فحص الأنماط السريعة (مثل: من.. إلى..)
-    route_pattern = r"(^|\s)من\s+.*?\s+(إلى|الى|لـ|للحرم|للمطار)(\s|$)"
-    if re.search(route_pattern, clean_text):
-        return True 
-
-        # البرومبت الشامل (The Master Prompt)
+    # 2. البرومبت العملاق المخصص للمدينة المنورة
     prompt = f"""
-    Role: You are an elite AI Traffic Controller for a specific 'Madinah Taxi & Delivery' Telegram group.
-    Objective: Filter messages to identify REAL CUSTOMERS seeking services (Rides, Delivery, School Transport).
-    
-    [STRICT ANALYSIS RULES]
-    You must classify the "Intent" of the sender.
-    - SENDER = CUSTOMER (Needs service) -> Reply 'YES'
-    - SENDER = DRIVER (Offers service) -> Reply 'NO'
-    - SENDER = SPAM/CHATTER -> Reply 'NO'
+    Role: You are an elite AI Traffic Controller for the 'Madinah Taxi & Delivery' system. 
+    Objective: Identify REAL CUSTOMERS in Al-Madinah Al-Munawwarah while ignoring drivers, ads, and spam.
 
-    [✅ CLASSIFY AS 'YES' (CUSTOMER REQUESTS)]
-    1. Explicit Ride Requests: (e.g., "أبغى سواق", "مطلوب كابتن", "سيارة للحرم", "مين يوديني؟").
-    2. Route Descriptions (Implicit): Text mentioning a destination or path (e.g., "من العزيزية للحرم", "مشوار للمطار", "إلى الراشد مول").
-    3. Location Pings (Incomplete Requests): If someone just names a location implies they need a driver there (e.g., "حي شوران؟", "أحد حول العالية؟", "في كباتن في الهجرة؟").
-    4. School & Monthly Contracts: (e.g., "توصيل مدارس", "نقل طالبات", "عقد شهري", "توصيل دوام").
-    5. Delivery & Logistics: Requests to move items (e.g., "توصيل غرض", "توصيل مفتاح", "طلبية من زاجل", "توصيل أكل").
-    6. Price Inquiries by Customer: (e.g., "بكم المشوار للمطار؟", "توديني بـ 20؟").
+    [CORE LOGIC]
+    Return 'YES' ONLY if the sender is a HUMAN CUSTOMER seeking a ride or delivery.
+    Return 'NO' if it's a driver offering service, an ad, or irrelevant talk.
 
-    [❌ CLASSIFY AS 'NO' (IGNORE THESE)]
-    1. Driver Offers (Supply): Any text indicating the sender IS a driver (e.g., "متواجد", "جاهز للتوصيل", "سيارة حديثة", "توصيل مشاوير", "على مدار الساعة", "الخاص مفتوح").
-    2. Social & Religious: Greetings, prayers, wisdom (e.g., "صباح الخير", "جمعة مباركة", "سبحان الله", "دعاء", "حكم").
-    3. Forbidden Spam Topics: 
-       - Medical Excuses (e.g., "سكليف", "عذر طبي", "اجازة مرضية").
-       - Marriage/Social (e.g., "خطابة", "زواج مسيار", "تعارف").
-       - Financial/Real Estate (e.g., "قروض", "أرض للبيع", "استثمار").
-    4. General Chat/Admin: Questions about rules, links, or weather.
+    [📍 COMPREHENSIVE MADINAH GEOGRAPHY]
+    Recognize any mention of these areas as a potential Madinah request:
+    - Central & Holy Area: (Al-Haram, Al-Markazia, Al-Baqi, Bab Al-Salam, Bab Al-Majidi).
+    - North: (Uhud, Sayh, Al-Raya, Al-Arid, Al-Azhari, Al-Ghaba, Bir Othman).
+    - South: (Qurban, Al-Awali, Al-Hizam, Quba, Al-Jumu'ah, Shoran, Al-Hadiga).
+    - West: (Al-Aziziyah, Al-Usayfirin, Al-Wabarah, Al-Duaithah, Al-Nasr, Al-Anisiyah).
+    - East: (Al-Iskan, Al-Khalidiya, Al-Nakhil, Al-Rawabi, Al-Aql, Al-Ghara).
+    - Landmarks: (Prophet's Mosque/Al-Haram, Prince Mohammad Bin Abdulaziz Airport MED, Haramain Train Station, Quba Mosque, Al-Qiblatain Mosque, Miqat Dhul Hulaifah, Mount Uhud, Taibah University, Islamic University).
+    - Malls: (Al Rashid Mega Mall, Al Noor Mall, Alia Mall, Al Manar Mall).
 
-    [📍 MADINAH CONTEXT KNOWLEDGE]
-    Treat these as valid locations implying a request if mentioned alone:
-    (Haram, Airport, Train Station, Aziziya, Shoran, Awali, Hijra, Baqdo, Quba, Sultana, Rashid Mall, Al-Noor, Taiba).
+    [✅ CLASSIFY AS 'YES' (CUSTOMER INTENT)]
+    - Direct: "أبغا سواق"، "مطلوب كابتن"، "مين يوصلني للحرم"، "في أحد حول قطار المدينة؟"
+    - Routes: "مشوار من العزيزية للراشد"، "من المطار للحرم"، "بكم توديني قباء؟"
+    - Slang/Local: (أبغى، أبغا، فينك، كباتن، يوديني، يوصلني، دحين، حق مشوار، توصيلة).
+    - Delivery: "أحتاج مندوب"، "توصيل غرض"، "أبغا أحد يجيب لي طلب من النور مول".
 
-    [DECISION LOGIC]
-    - "From A to B" -> YES
-    - "I am available" -> NO
-    - "School delivery needed" -> YES
-    - "Sick leave for sale" -> NO
-    - "Who is in Shoran?" -> YES
+    [❌ CLASSIFY AS 'NO' (DRIVER/SPAM/ADS)]
+    - Driver offers: "شغال الآن"، "موجود بالمدينة"، "سيارة نظيفة"، "توصيل مطار المدينة بأرخص الأسعار".
+    - Keywords: (متواجد، متاح، أسعارنا، استقدام، عقار، سكليف، عذر طبي، قرض، باقات).
 
     Input Text: "{text}"
 
@@ -167,19 +146,30 @@ async def analyze_message_hybrid(text):
 
     try:
         response = await asyncio.to_thread(ai_model.generate_content, prompt)
-        result = response.text.strip().upper().replace(".", "")
-        return "YES" in result
+        result = response.text.strip().upper().replace(".", "").replace("'", "")
+        
+        if "YES" in result:
+            print(f"✅ ذكاء اصطناعي: قبول طلب للمدينة المنورة")
+            return True
+        else:
+            return False
+
     except Exception as e:
         print(f"⚠️ تجاوز AI (فشل الاتصال): {e}")
         return manual_fallback_check(clean_text)
 
 def manual_fallback_check(clean_text):
-    order_words = ["ابي", "ابغي", "محتاج", "نبي", "مطلوب", "بكم"]
-    service_words = ["سواق", "توصيل", "مشوار", "يوديني", "يوصلني"]
-    has_order = any(w in clean_text for w in order_words)
-    has_service = any(w in clean_text for w in service_words)
-    has_route = "من " in clean_text and ("الى" in clean_text or "لي" in clean_text)
-    return (has_order and has_service) or has_route
+    # كلمات الطلب والمدينة
+    order_triggers = ["ابي", "ابغي", "أبغا", "محتاج", "مطلوب", "نبي", "مين يوديني"]
+    madinah_keywords = ["سواق", "كابتن", "مشوار", "توصيل", "المدينة", "المدينه", "الحرم", "طيبة"]
+    
+    has_order = any(w in clean_text for w in order_triggers)
+    has_keyword = any(w in clean_text for w in madinah_keywords)
+    
+    # فحص نمط "من ... إلى"
+    has_route = "من" in clean_text and ("الى" in clean_text or "إلى" in clean_text or "لـ" in clean_text)
+    
+    return (has_order and has_keyword) or has_route
 
 # ---------------------------------------------------------
 # 3. [تعديل 2] دالة الإرسال للمستخدمين المحددين
