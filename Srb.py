@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from flask import Flask  # أضف هذا السطر
 import threading
 from pyrogram import Client, filters  # تأكد من إضافة filters هنا
+from pyrogram import enums
 
 # --- إعداد السجلات ---
 logging.basicConfig(level=logging.INFO)
