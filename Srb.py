@@ -233,53 +233,40 @@ def run_flask():
 
 
 
-async def main_run():
-    print("🚀 جاري تشغيل (سيرفر الرادار العام الشامل)...")
+import asyncio
+from pyrogram import idle
+
+async def main():
+    print("🚀 بدء تشغيل الرادار (جدة)...")
     try:
+        # تشغيل اليوزر بوت
         if not user_app.is_connected:
             await user_app.start()
         
-        print("📋 جاري مزامنة وتنشيط كافة المجموعات (خاصة + عامة)...")
+        print("✅ اليوزر بوت متصل ومستقر!")
         
-        count = 0
-        # زيادة الحد لضمان الوصول لجميع المجموعات
-        async for dialog in user_app.get_dialogs(limit=300):
-            # التحقق من نوع المحادثة (جروب أو سوبر جروب عام)
-            if dialog.chat.type in [enums.ChatType.GROUP, enums.ChatType.SUPERGROUP]:
-                count += 1
-                # سطر سحري: جلب آخر رسالة ينعش الاتصال بالمجموعات العامة
-                # ويجعل السيرفر يتعرف على "الآيديات" الجديدة
-                try:
-                    await user_app.get_discussion_message(dialog.chat.id, dialog.top_message.id)
-                except:
-                    pass 
-        
-        print(f"✅ الرادار يراقب الآن ({count}) مجموعة.")
-        print("📡 وضع الاستماع العام نشط... (بانتظار الرسائل)")
-        
-        await idle()
+        # تشغيل الفلاسك في خلفية الحلقة (اختياري إذا كنت تستخدم threading)
+        # إذا كنت تستخدم threading.Thread لـ Flask، تأكد أنها تبدأ قبل asyncio.run
+
+        # السطر السحري لمنع تصادم الـ Loops
+        await idle() 
 
     except Exception as e:
-        print(f"❌ فشل بدء الرادار: {e}")
+        print(f"❌ خطأ في main: {e}")
     finally:
         if user_app.is_connected:
             await user_app.stop()
 
 if __name__ == "__main__":
-    # 1. تشغيل الفلاسك (Health Check) لضمان بقاء السيرفر حياً (مهم لـ Render/Heroku)
+    # 1. تشغيل سيرفر الصحة (Flask) في خيط منفصل تماماً
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
 
-    # 2. حذفنا تهيئة قاعدة البيانات من هنا لأنها انتقلت لسيرفر البوت
-
-    # 3. تشغيل اليوزر بوت (الرادار)
-    loop = asyncio.get_event_loop()
+    # 2. تشغيل الحلقة الأساسية لـ Pyrogram بشكل نظيف
     try:
-        # تأكد أن اسم الدالة هو main_run وأنها تحتوي على user_app.start()
-        loop.run_until_complete(main_run())
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(main())
     except KeyboardInterrupt:
-        # إغلاق آمن عند إيقاف السيرفر
-        if user_app.is_connected:
-            loop.run_until_complete(user_app.stop())
-    finally:
-        print("📴 تم إيقاف سيرفر الرادار.")
+        pass
+    except Exception as e:
+        print(f"⚠️ خطأ فادح في التشغيل: {e}")
