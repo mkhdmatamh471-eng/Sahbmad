@@ -1,7 +1,5 @@
 import re
 import os
-import psycopg2
-from psycopg2 import pool
 import asyncio
 
 # --- تعريف رابط قاعدة البيانات ---
