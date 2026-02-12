@@ -8,7 +8,7 @@ from pyrogram import Client, filters
 from flask import Flask # للتأكد من وجودها
 # تأكد أن ملف config.py يحتوي على normalize_text و CITIES_DISTRICTS
 from config import normalize_text, CITIES_DISTRICTS 
-
+from pyrogram import idle 
 # --- إعدادات الهوية ---
 
 
@@ -162,15 +162,24 @@ def manual_fallback_check(clean_text):
     return (has_order and has_service) or has_route
 
 
-@user_app.on_message(filters.chat(TARGET_CHATS) & ~filters.service)
+# بدلاً من الفلتر القديم، استخدم هذا للاختبار:
+# استخدم هذا الفلتر الشامل
+@user_app.on_message(filters.group & ~filters.service)
 async def handle_new_messages(client, message):
     try:
+        # --- سطر الاختبار (تأكد من ظهوره في اللوج) ---
+        print(f"📥 استلمت رسالة من: {message.chat.title} | النص: {message.text[:30]}...")
+
         text = message.text or message.caption
+        # تجاهل الرسائل الفارغة أو رسائل الحساب نفسه
         if not text or (message.from_user and message.from_user.is_self):
             return
 
         # 1. التحليل بالذكاء الاصطناعي
         is_valid = await analyze_message_hybrid(text)
+        
+        # سطر إضافي للتأكد من نتيجة الذكاء الاصطناعي
+        print(f"🧐 نتيجة تحليل الذكاء الاصطناعي: {is_valid}")
 
         if is_valid:
             # 2. استخراج الحي
@@ -182,22 +191,22 @@ async def handle_new_messages(client, message):
                         found_d = d
                         break
 
-            # 3. إرسال "حزمة البيانات" للبوت الموزع عبر الخاص
+            # 3. إرسال البيانات للبوت
             customer = message.from_user
             transfer_data = (
                 f"#ORDER_DATA#\n"
                 f"DISTRICT:{found_d}\n"
                 f"CUST_ID:{customer.id}\n"
-                f"CUST_NAME:{customer.first_name}\n"
+                f"CUST_NAME:{customer.first_name if customer.first_name else 'عميل'}\n"
                 f"CONTENT:{text}"
             )
 
-            # اليوزر بوت يرسل الرسالة لنفسه (إلى بوت التوزيع)
-            await user_app.send_message(BOT_USERNAME, transfer_data) 
+            # إرسال لبوت التوزيع
+            await client.send_message(BOT_USERNAME, transfer_data) 
             print(f"✅ [رادار] تم قنص طلب في ({found_d}) وتحويله للبوت.")
 
     except Exception as e:
-        logging.error(f"⚠️ خطأ في معالجة الرسالة: {e}")
+        print(f"⚠️ خطأ في معالجة الرسالة: {e}")
 
 # ---------------------------------------------------------
 # 5. معالج البوت الموزع (يستقبل من الرادار ويوزع)
@@ -219,31 +228,32 @@ def run_flask():
     # تشغيل الفلاسك على 0.0.0.0 ضروري ليعمل على السيرفر
     app.run(host='0.0.0.0', port=port)
 
+# تأكد من وجود هذا الاستيراد
+
 async def main_run():
-    print("🚀 جاري تشغيل (سيرفر الرادار) بالجلسة الجديدة...")
+    print("🚀 جاري تشغيل (سيرفر الرادار العام)...")
     try:
-        await user_app.start()
+        if not user_app.is_connected:
+            await user_app.start()
         
-        # قائمة الآيديات التي أرسلتها سابقاً (تأكد من وجودها في الكود)
-        TARGET_CHATS = [-1002066080450, -1001236223360, -1002112114167, -1001199555920, -1002521083369, -1001653442381, -1001484510620, -1001615555209, -1001801366018, -1001333159209, -1002425448607, -1001442812315, -1001419990293, -1002197678343, -1001671410526, -1001406320324]
-
-        print("📋 جاري فحص الاتصال بالمجموعات المستهدفة...")
+        print("📋 جاري مزامنة كافة المجموعات المشترك بها الحساب...")
         
-        # مزامنة سريعة لأحدث 100 محادثة لإنعاش الذاكرة (Peer caching)
         count = 0
-        async for dialog in user_app.get_dialogs(limit=100):
-            if dialog.chat.id in TARGET_CHATS:
+        # نمر على آخر 200 محادثة لضمان تنشيط جميع المجموعات في ذاكرة الرادار
+        async for dialog in user_app.get_dialogs(limit=200):
+            if dialog.chat.type in [enums.ChatType.GROUP, enums.ChatType.SUPERGROUP]:
                 count += 1
-                # print(f"✅ متصل بـ: {dialog.chat.title}") # يمكنك تفعيله للتأكد
-
-        print(f"✅ الرادار يراقب الآن ({count}) مجموعة من القائمة المستهدفة.")
         
+        print(f"✅ الرادار يراقب الآن ({count}) مجموعة (وضع المراقبة العامة نشط).")
+        
+        # وضع الاستماع المستمر
+        await idle()
+
     except Exception as e:
         print(f"❌ فشل بدء الرادار: {e}")
-        return
-
-    # الانتظار للأبد لاستقبال الرسائل
-    await asyncio.Event().wait()
+    finally:
+        if user_app.is_connected:
+            await user_app.stop()
 
 if __name__ == "__main__":
     # 1. تشغيل الفلاسك (Health Check) لضمان بقاء السيرفر حياً (مهم لـ Render/Heroku)
