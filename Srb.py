@@ -2,39 +2,26 @@ import asyncio
 import os
 import re
 import logging
-import threading # أضف هذا للـ Flask
+import threading
 import google.generativeai as genai
-from pyrogram import Client, filters
-from flask import Flask # للتأكد من وجودها
+from flask import Flask
+
+# --- استيرادات Telethon ---
+from telethon import TelegramClient, events, sync
+from telethon.sessions import StringSession
+
 # تأكد أن ملف config.py يحتوي على normalize_text و CITIES_DISTRICTS
 from config import normalize_text, CITIES_DISTRICTS 
-from pyrogram import Client, filters, idle, enums  # أضف enums هنا
- 
-# --- إعدادات الهوية ---
-
 
 # --- متغيرات البيئة ---
 API_ID = os.environ.get("API_ID", "36360458")
 API_HASH = os.environ.get("API_HASH", "daae4628b4b4aac1f0ebfce23c4fa272")
-SESSION_STRING = os.environ.get("SESSION_STRING","BAIq0QoAX5mya6NENJII4U3gDEzpysbtycl61XAyJjoPoPyNzEhH4bhG9XwwT4AEbNP3FNlsmufFDkGf4ksTGWf6KNOOOlqNjrq7lGsnG88l2ZYeAkCCcM5TYtnfkjPVg5m1wuG7IwDlsg-ozJIeqnhB7PXr3RNnJegM8_VLBcmbIdso9l79SenaqhYp1Kqsfpew42KG6hXvtFc8shQHOhF2PTUWwm_pk144uE3_lu9bUim2O9dO1nER2L972CXa4tFoEW7x96jt4nod-FtC1Tkmob5KY6gxI0d_pp6eAxoLMt1BatECz-ttZVJ4tNpcxLDytuOlS4Edto_iHylF9nuxqzLPIQAAAAH-ZrzOAA")
+# ⚠️ انتبه: كود جلسة Pyrogram لا يعمل هنا. قم بتوليد كود جديد أو تسجيل الدخول لأول مرة.
+SESSION_STRING = os.environ.get("TELETHON_SESSION", "1BJWap1sBuyfIQ9CyhEsZ-f9Xo4W1pr24lihTxGhG_Lrkv25fXoe_HFNLnH0KFqQiXYsMuR_8gzff_3pZLDXF4Q8VUCAQdH_TA_x4z7P8byAP4gTJUc6SNucFy6bznjDHSBnJZht4rrrrwUU9wSeQvsvmP0imFJMFhutiX91CxHYLZVWivexnRXb5h8r_0szwlll1-nbULa7yTc7zx7R2AxcpwRGhGfDCz75HfAKx-YJ9LJZPqU5_dEvyFoC2LssEakTy_gl2tgU9Hy2dLq8HL6Bu-K6GugoAZ6tC83znjckwk_DgWeU9kwOYOms3amFf54JdIf7ML25n9zSkM9WaSR-C_9FD3n4=") 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyA3g-MQeBtMjRA57g6ainK71yJaelG1d_0")
 BOT_USERNAME = "Mishwariibot" 
-# ---------------------------------------------------------
-# 🛠️ [تعديل 1] قائمة المستخدمين الذين سيستلمون الطلبات
-# ضع الـ IDs الخاصة بهم هنا (أرقام فقط)
-# ---------------------------------------------------------
-# 🛠️ قائمة الـ IDs المحدثة الذين سيستلمون الطلبات في الخاص (مفتوحة)
- # <--- ضع الآيديات الحقيقية هنا
 
-TARGET_CHATS = [
-    -1002066080450, -1001236223360, -1002112114167, -1001199555920, 
-    -1002521083369, -1001653442381, -1001484510620, -1001615555209, 
-    -1001801366018, -1001333159209, -1002425448607, -1001442812315, 
-    -1001419990293, -1002197678343, -1001671410526, -1001406320324
-]
-
-
-# --- إعداد Gemini 1.5 Flash ---
+# --- إعداد Gemini (كما هو) ---
 genai.configure(api_key=GEMINI_API_KEY)
 generation_config = {
   "temperature": 0.1,
@@ -42,12 +29,19 @@ generation_config = {
   "top_k": 40,
   "max_output_tokens": 5,
 }
-# اذهب إلى قسم إعداد Gemini وغير هذا السطر:
-# التعديل الصحيح لضمان عدم حدوث خطأ 404
+
 Ai_model = genai.GenerativeModel(
-    model_name='gemini-1.5-flash', # احذف كلمة -latest لضمان الاستقرار
+    model_name='gemini-1.5-flash', 
     generation_config=generation_config
 )
+
+# --- إعداد عميل Telethon ---
+if SESSION_STRING:
+    # استخدام كود الجلسة إذا وجد
+    client = TelegramClient(StringSession(SESSION_STRING), int(API_ID), API_HASH)
+else:
+    # سيطلب منك تسجيل الدخول وإنشاء ملف .session عند التشغيل الأول
+    client = TelegramClient('radar_session', int(API_ID), API_HASH)
 
 
 # --- عملاء تليجرام ---
@@ -149,13 +143,13 @@ async def analyze_message_hybrid(text):
     """
 
     try:
-        response = await asyncio.to_thread(ai_model.generate_content, prompt)
+        # تأكد من استخدام Ai_model هنا (نفس الاسم المعرف في الأعلى)
+        response = await asyncio.to_thread(Ai_model.generate_content, prompt)
         result = response.text.strip().upper().replace(".", "")
         return "YES" in result
     except Exception as e:
         print(f"⚠️ تجاوز AI (فشل الاتصال): {e}")
         return manual_fallback_check(clean_text)
-
 def manual_fallback_check(clean_text):
     order_words = ["ابي", "ابغي", "محتاج", "نبي", "مطلوب", "بكم"]
     service_words = ["سواق", "توصيل", "مشوار", "يوديني", "يوصلني"]
@@ -167,21 +161,27 @@ def manual_fallback_check(clean_text):
 
 # بدلاً من الفلتر القديم، استخدم هذا للاختبار:
 # استخدم هذا الفلتر الشامل
-@user_app.on_message(filters.group & ~filters.service)
-async def handle_new_messages(client, message):
-    try:
-        # --- سطر الاختبار (تأكد من ظهوره في اللوج) ---
-        print(f"📥 استلمت رسالة من: {message.chat.title} | النص: {message.text[:30]}...")
+# الفلتر في تيليثون لاستقبال رسائل المجموعات فقط (القادمة Incoming)
+@client.on(events.NewMessage(incoming=True))
+async def handle_new_messages(event):
+    # التحقق من أن الرسالة في مجموعة (Group أو Supergroup)
+    if not event.is_group:
+        return
 
-        text = message.text or message.caption
-        # تجاهل الرسائل الفارغة أو رسائل الحساب نفسه
-        if not text or (message.from_user and message.from_user.is_self):
+    try:
+        # الحصول على كائن المحادثة والنص
+        chat = await event.get_chat()
+        text = event.raw_text # في تيليثون نستخدم raw_text
+        
+        # تجاهل الرسائل الفارغة
+        if not text:
             return
+
+        # سطر الاختبار
+        print(f"📥 استلمت رسالة من: {chat.title} | النص: {text[:30]}...")
 
         # 1. التحليل بالذكاء الاصطناعي
         is_valid = await analyze_message_hybrid(text)
-        
-        # سطر إضافي للتأكد من نتيجة الذكاء الاصطناعي
         print(f"🧐 نتيجة تحليل الذكاء الاصطناعي: {is_valid}")
 
         if is_valid:
@@ -195,16 +195,20 @@ async def handle_new_messages(client, message):
                         break
 
             # 3. إرسال البيانات للبوت
-            customer = message.from_user
+            sender = await event.get_sender()
+            sender_id = sender.id if sender else 0
+            sender_name = sender.first_name if sender and sender.first_name else "عميل"
+
             transfer_data = (
                 f"#ORDER_DATA#\n"
                 f"DISTRICT:{found_d}\n"
-                f"CUST_ID:{customer.id}\n"
-                f"CUST_NAME:{customer.first_name if customer.first_name else 'عميل'}\n"
+                f"CUST_ID:{sender_id}\n"
+                f"CUST_NAME:{sender_name}\n"
                 f"CONTENT:{text}"
             )
 
-            # إرسال لبوت التوزيع
+            # إرسال لبوت التوزيع (تيليثون يستخدم send_message أيضاً)
+            # ملاحظة: يجب أن يكون الرادار قد راسل البوت سابقاً أو يعرفه
             await client.send_message(BOT_USERNAME, transfer_data) 
             print(f"✅ [رادار] تم قنص طلب في ({found_d}) وتحويله للبوت.")
 
@@ -235,40 +239,35 @@ def run_flask():
 
 
 
-import asyncio
-from pyrogram import idle
-
 async def main():
-    print("🚀 بدء تشغيل الرادار الشامل (جدة)...")
+    print("🚀 بدء تشغيل الرادار الشامل (تيليثون)...")
     try:
-        if not user_app.is_connected:
-            await user_app.start()
+        # بدء الاتصال
+        await client.start()
         
-        print("✅ اليوزر بوت متصل. جاري مزامنة المجموعات الكبيرة والعامة...")
+        print("✅ اليوزر بوت متصل. جاري مزامنة المجموعات...")
         
-        # --- السطر السحري لحل مشكلة المجموعات الكبيرة ---
-        # استخدام limit=None يضمن تحميل جميع المجموعات في ذاكرة الرادار
-        async for dialog in user_app.get_dialogs(limit=None):
-            # التأكد من شمول النوعين: المجموعات العادية والسوبر جروب
-            if dialog.chat.type in [enums.ChatType.GROUP, enums.ChatType.SUPERGROUP]:
-                # هذا الإجراء ينشط استقبال التحديثات للمجموعات العامة الكبيرة
-                pass 
+        # --- حل مشكلة المجموعات الكبيرة في تيليثون ---
+        # iter_dialogs يقوم بتحديث الذاكرة والوصول لكل المجموعات
+        async for dialog in client.iter_dialogs():
+            pass # مجرد المرور عليها يكفي لتفعيل الاستقبال
         
-        print("🚀 الرادار يراقب الآن جميع المجموعات (خاصة + عامة) بنجاح!")
-        await idle() 
+        print(f"🚀 الرادار يراقب الآن جميع المجموعات (خاصة + عامة) بنجاح!")
+        
+        # التشغيل المستمر في تيليثون
+        await client.run_until_disconnected()
 
     except Exception as e:
         print(f"❌ خطأ في main: {e}")
     finally:
-        if user_app.is_connected:
-            await user_app.stop()
+        await client.disconnect()
 
 if __name__ == "__main__":
-    # 1. تشغيل سيرفر الصحة (Flask) في خيط منفصل تماماً
+    # 1. تشغيل سيرفر الصحة (Flask)
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
 
-    # 2. تشغيل الحلقة الأساسية لـ Pyrogram بشكل نظيف
+    # 2. تشغيل الحلقة الأساسية
     try:
         loop = asyncio.get_event_loop()
         loop.run_until_complete(main())
