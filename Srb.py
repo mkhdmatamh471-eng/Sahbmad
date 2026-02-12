@@ -189,21 +189,20 @@ def manual_fallback_check(clean_text):
 # 3. [تعديل 2] دالة الإرسال للمستخدمين المحددين
 # ---------------------------------------------------------
 
-async def broadcast_order_to_drivers(detected_district, original_msg):
-    print("📢 بدأت محاولة الإرسال للسائقين...")
-    content = original_msg.text or original_msg.caption
-    customer = original_msg.from_user
-    
-    if not customer: return
+# ---------------------------------------------------------
+# دالة البث للسائقين (معدلة للنظام الجديد - تستقبل بيانات نصية)
+# ---------------------------------------------------------
+async def broadcast_order_to_drivers(district, content, cust_id, cust_name):
+    print(f"📢 البوت يبدأ معالجة البث لحي: {district}")
 
-    # 1. تجهيز الروابط والمعلومات الأساسية (خارج الحلقة)
-    contact_url = f"https://t.me/{customer.username}" if customer.username else f"tg://user?id={customer.id}"
+    # 1. تجهيز رابط التواصل باستخدام الآيدي القادم من البيانات
+    contact_url = f"tg://user?id={cust_id}"
     
-    # تعريف base_text هنا ليكون متاحاً لجميع العمليات بالأسفل
+    # 2. تجهيز نص الرسالة
     base_text = (
         f"🎯 <b>طلب مشوار جديد</b>\n"
-        f"📍 الحي: {detected_district}\n"
-        f"👤 العميل: {customer.first_name}\n"
+        f"📍 الحي: {district}\n"
+        f"👤 العميل: {cust_name}\n"
         f"📝 التفاصيل: {content}\n"
     )
 
@@ -214,6 +213,7 @@ async def broadcast_order_to_drivers(detected_district, original_msg):
 
     try:
         with conn.cursor() as cur:
+            # جلب السائقين النشطين فقط
             cur.execute("""
                 SELECT user_id, subscription_expiry 
                 FROM users 
@@ -221,19 +221,22 @@ async def broadcast_order_to_drivers(detected_district, original_msg):
             """)
             drivers = cur.fetchall()
             
-            print(f"👥 تم العثور على {len(drivers)} سائق")
+            print(f"👥 جاري الإرسال لـ {len(drivers)} سائق...")
 
             for user_id, expiry in drivers:
                 is_active = False
                 if expiry:
-                    # تأكد أنك أضفت 'from datetime import timezone' في أعلى الملف
+                    # التأكد من التوقيت
                     now = datetime.now(timezone.utc)
                     is_active = (expiry > now)
 
-                kb = InlineKeyboardMarkup([[InlineKeyboardButton("💬 مراسلة العميل", url=contact_url)]]) if is_active else \
-                     InlineKeyboardMarkup([[InlineKeyboardButton("💳 اشترك لتفعيل المراسلة", url="https://t.me/x3FreTx")]])
-                
-                footer = "✅ اشتراكك فعال" if is_active else "⚠️ التواصل للمشتركين فقط"
+                # تحديد الزر بناءً على الاشتراك
+                if is_active:
+                    kb = InlineKeyboardMarkup([[InlineKeyboardButton("💬 مراسلة العميل", url=contact_url)]])
+                    footer = "\n✅ اشتراكك فعال"
+                else:
+                    kb = InlineKeyboardMarkup([[InlineKeyboardButton("💳 اشترك لتفعيل المراسلة", url="https://t.me/x3FreTx")]])
+                    footer = "\n⚠️ التواصل للمشتركين فقط"
 
                 try:
                     await bot_sender.send_message(
@@ -243,37 +246,33 @@ async def broadcast_order_to_drivers(detected_district, original_msg):
                         parse_mode=ParseMode.HTML,
                         disable_notification=False
                     )
-                    print(f"✅ تم تأكيد التسليم للسائق: {user_id}")
+                    # طباعة للتأكد (اختياري يمكن إزالته لتنظيف التيرمينال)
+                    # print(f"✅ تم الإرسال للسائق: {user_id}")
                 except Exception as e:
-                    print(f"❌ فشل حقيقي في الإرسال للسائق {user_id}: {e}")
+                    print(f"⚠️ تخطي السائق {user_id}: {e}")
                 
+                # تأخير بسيط جداً لمنع الحظر (FloodWait)
                 await asyncio.sleep(0.05)
 
     except Exception as e:
-        print(f"❌ خطأ كارثي: {e}")
+        print(f"❌ خطأ عام في دالة البث: {e}")
     finally:
         release_db_connection(conn)
+        print("🏁 انتهت عملية البث للسائقين.")
 
-async def notify_channel(detected_district, original_msg):
-    content = original_msg.text or original_msg.caption
+
+# ---------------------------------------------------------
+# دالة الإرسال للقناة (معدلة للنظام الجديد)
+# ---------------------------------------------------------
+async def notify_channel(district, content, cust_id):
     if not content: return
 
     try:
-        customer = original_msg.from_user
-        # استخراج المعرفات اللازمة
-        customer_id = customer.id if customer else 0
-        msg_id = getattr(original_msg, "id", getattr(original_msg, "message_id", 0))
-        chat_id_str = str(original_msg.chat.id).replace("-100", "")
-
-        # --- الإعدادات (تأكد من مطابقة يوزر البوت) ---
-        # استبدل 'YourBotUsername' بيوزر بوتك بدون علامة @
+        # الإعدادات
         bot_username = "Mishwariibot" 
 
-        # تجهيز الروابط العميقة (Deep Links)
-        # الرابط الأول لمراسلة العميل
-        gate_contact = f"https://t.me/{bot_username}?start=contact_{customer_id}"
-        # الرابط الثاني لمصدر الطلب في الجروب
-        gate_source = f"https://t.me/{bot_username}?start=source_{chat_id_str}_{msg_id}"
+        # تجهيز الروابط العميقة (Deep Links) باستخدام الآيدي النصي
+        gate_contact = f"https://t.me/{bot_username}?start=contact_{cust_id}"
 
         buttons = [
             [InlineKeyboardButton("💬 مراسلة العميل (للمشتركين)", url=gate_contact)],
@@ -282,9 +281,11 @@ async def notify_channel(detected_district, original_msg):
 
         keyboard = InlineKeyboardMarkup(buttons)
 
+        # ملاحظة: تم إزالة رابط المصدر (gate_source) لأنه يحتاج آيدي الرسالة الأصلية 
+        # واليوزر بوت يرسل البيانات كنص جديد، لكن الرابط الأساسي (المراسلة) يعمل 100%
         alert_text = (
             f"🎯 <b>طلب مشوار جديد</b>\n\n"
-            f"📍 <b>المنطقة:</b> {detected_district}\n"
+            f"📍 <b>المنطقة:</b> {district}\n"
             f"📝 <b>التفاصيل:</b>\n<i>{content}</i>\n\n"
             f"⏰ <b>الوقت:</b> {datetime.now().strftime('%H:%M:%S')}\n"
             f"⚠️ <i>الروابط أعلاه تفتح للمشتركين فقط.</i>"
@@ -296,25 +297,23 @@ async def notify_channel(detected_district, original_msg):
             reply_markup=keyboard,
             parse_mode=ParseMode.HTML
         )
-        print(f"✅ تم الإرسال للقناة بروابط مشفرة: {detected_district}")
+        print(f"✅ تم الإرسال للقناة بنجاح: {district}")
 
     except Exception as e:
         print(f"❌ خطأ إرسال للقناة: {e}")
-
 
 # ---------------------------------------------------------
 # 4. الرادار الرئيسي
 # ---------------------------------------------------------
 # بدلاً من الحلقة القديمة، نستخدم Decorator لالتقاط الرسائل فور وصولها
+@# ---------------------------------------------------------
+# 4. الرادار الرئيسي (المعدل)
+# ---------------------------------------------------------
 @user_app.on_message(filters.group & ~filters.service)
 async def handle_new_messages(client, message):
-
-
-    # --- [التعديل هنا] ---
-    # هذا السطر سيطبع أي رسالة تصل للرادار في السجل (Logs) للتأكد من أنه يرى الجروب
+    # طباعة اسم الجروب للتأكد من المتابعة
     chat_title = message.chat.title or "جروب غير معروف"
-    print(f"📥 الرادار استلم رسالة من [{chat_title}] - المحتوى: {message.text or 'وسائط'}")
-    # ---------------------
+    print(f"📥 الرادار استلم رسالة من [{chat_title}]")
 
     try:
         text = message.text or message.caption
@@ -334,28 +333,75 @@ async def handle_new_messages(client, message):
                         found_d = d
                         break
             
-            # --- التعديل الجوهري للسرعة ---
-            # تشغيل الإرسال للسائقين وللقناة في نفس اللحظة دون انتظار أحدهما للآخر
-            asyncio.create_task(broadcast_order_to_drivers(found_d, message))
-            asyncio.create_task(notify_channel(found_d, message))
+            # --- [التغيير الجوهري] ---
+            # بدلاً من الإرسال المباشر، نرسل البيانات للبوت الموزع
+            customer = message.from_user
             
-            print(f"⚡ تم إطلاق مهام الإرسال الفوري لـ {found_d}")
+            # تجهيز "حزمة بيانات" مشفرة ليستلمها البوت
+            # نستخدم فواصل واضحة لنتمكن من فصل البيانات لاحقاً
+            transfer_data = (
+                f"#ORDER_DATA#\n"
+                f"DISTRICT:{found_d}\n"
+                f"CUST_ID:{customer.id}\n"
+                f"CUST_NAME:{customer.first_name}\n"
+                f"CONTENT:{text}"
+            )
+            
+            # ⚠️ هام جداً: استبدل YOUR_BOT_USERNAME بمعرف بوتك (بدون @)
+            # مثال: await user_app.send_message("TaxiMadinahBot", transfer_data)
+            await user_app.send_message("Mishwariibot", transfer_data) 
+            
+            print(f"✅ تم تحويل الطلب ({found_d}) إلى البوت الموزع.")
 
     except Exception as e:
         logging.error(f"Error handling message: {e}")
 
+# ---------------------------------------------------------
+# 5. معالج البوت الموزع (يستقبل من الرادار ويوزع)
+# ---------------------------------------------------------
+@bot_sender.on_message(filters.private & filters.regex("#ORDER_DATA#"))
+async def bot_distribution_handler(client, message):
+    try:
+        # تقطيع البيانات المستلمة من اليوزر بوت
+        data = message.text.split("\n")
+        
+        # استخراج القيم (تعتمد على الترتيب الذي وضعناه في الرادار)
+        # DISTRICT:Name -> نأخذ ما بعد النقطتين
+        district = data[1].split(":", 1)[1]
+        cust_id = data[2].split(":", 1)[1]
+        cust_name = data[3].split(":", 1)[1]
+        # المحتوى قد يحتوي على أسطر جديدة، لذا نأخذ الباقي
+        content = data[4].split(":", 1)[1]
+
+        print(f"🤖 البوت الموزع استلم طلباً لحي: {district}")
+
+        # تشغيل البث في الخلفية (Parallel Tasks)
+        # لاحظ أننا نمرر البيانات كنصوص الآن وليس كأوبجكت رسالة
+        asyncio.create_task(broadcast_to_drivers_logic(district, content, cust_id, cust_name))
+        asyncio.create_task(notify_channel_logic(district, content, cust_id))
+        
+    except Exception as e:
+        print(f"❌ خطأ في معالج التوزيع بالبوت: {e}")
+
 # دالة التشغيل التي تضمن بقاء العميل متصلاً
 async def main_run():
-    await user_app.start()
-    print("🔄 جاري فحص ومزامنة جميع المجموعات... قد يستغرق ذلك لحظات")
+    print("🚀 جاري تشغيل النظام (الرادار + البوت الموزع)...")
     
-    # تغيير limit=None سيجعل البوت يمر على كل القروبات المشترك بها
-    async for dialog in user_app.get_dialogs(limit=None):
-        if dialog.chat.type in [enums.ChatType.GROUP, enums.ChatType.SUPERGROUP]:
-            # هذه الخطوة تجبر الحساب على التعرف على الآيدي الخاص بالجروب
-            pass 
-            
-    print("🚀 الرادار الآن يراقب جميع المجموعات بنجاح...")
+    # تشغيل الاثنين معاً
+    await user_app.start()
+    await bot_sender.start()
+    
+    print("✅ النظام يعمل! الرادار يراقب، والبوت جاهز للتوزيع.")
+    
+    # كود قراءة الجروبات (للرادار)
+    try:
+        async for dialog in user_app.get_dialogs(limit=None):
+            if dialog.chat.type in [enums.ChatType.GROUP, enums.ChatType.SUPERGROUP]:
+                pass 
+        print("📋 تم تحديث قائمة الجروبات.")
+    except Exception as e:
+        print(f"⚠️ تنبيه مزامنة: {e}")
+        
     await asyncio.Event().wait()
 
 # --- خادم الويب (Health Check) ---
