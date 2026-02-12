@@ -25,7 +25,13 @@ BOT_USERNAME = "Mishwariibot"
 # 🛠️ قائمة الـ IDs المحدثة الذين سيستلمون الطلبات في الخاص (مفتوحة)
  # <--- ضع الآيديات الحقيقية هنا
 
-CHANNEL_ID = -1003763324430 
+TARGET_CHATS = [
+    -1002066080450, -1001236223360, -1002112114167, -1001199555920, 
+    -1002521083369, -1001653442381, -1001484510620, -1001615555209, 
+    -1001801366018, -1001333159209, -1002425448607, -1001442812315, 
+    -1001419990293, -1002197678343, -1001671410526, -1001406320324
+]
+
 
 # --- إعداد Gemini 1.5 Flash ---
 genai.configure(api_key=GEMINI_API_KEY)
@@ -156,7 +162,7 @@ def manual_fallback_check(clean_text):
     return (has_order and has_service) or has_route
 
 
-@user_app.on_message(filters.group & ~filters.service)
+@user_app.on_message(filters.chat(TARGET_CHATS) & ~filters.service)
 async def handle_new_messages(client, message):
     try:
         text = message.text or message.caption
@@ -175,7 +181,7 @@ async def handle_new_messages(client, message):
                     if normalize_text(d) in text_c:
                         found_d = d
                         break
-            
+
             # 3. إرسال "حزمة البيانات" للبوت الموزع عبر الخاص
             customer = message.from_user
             transfer_data = (
@@ -185,7 +191,7 @@ async def handle_new_messages(client, message):
                 f"CUST_NAME:{customer.first_name}\n"
                 f"CONTENT:{text}"
             )
-            
+
             # اليوزر بوت يرسل الرسالة لنفسه (إلى بوت التوزيع)
             await user_app.send_message(BOT_USERNAME, transfer_data) 
             print(f"✅ [رادار] تم قنص طلب في ({found_d}) وتحويله للبوت.")
@@ -216,7 +222,7 @@ def run_flask():
 async def main_run():
     print("🚀 جاري تشغيل (سيرفر الرادار) فقط...")
     await user_app.start()
-    
+
     print("📋 جاري مزامنة المجموعات...")
     try:
         async for dialog in user_app.get_dialogs(limit=None):
@@ -225,7 +231,7 @@ async def main_run():
         print("✅ الرادار يراقب جميع المجموعات الآن.")
     except Exception as e:
         print(f"⚠️ تنبيه مزامنة: {e}")
-        
+
     await asyncio.Event().wait()
 
 
