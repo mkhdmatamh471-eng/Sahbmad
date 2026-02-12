@@ -15,7 +15,7 @@ from config import normalize_text, CITIES_DISTRICTS
 # --- متغيرات البيئة ---
 API_ID = os.environ.get("API_ID", "36360458")
 API_HASH = os.environ.get("API_HASH", "daae4628b4b4aac1f0ebfce23c4fa272")
-SESSION_STRING = os.environ.get("SESSION_STRING", "BAIq0QoAhqQ7maNFOf6AUKx6sP1-w-GnmTM4GCyqL0INirrOO99rgvLN38CRda5n7P4vstDSL8lBamXl5i8urauRc3Zpq54NJsBdJyNy8pqhp9KzAGDoE1Lveo78y_81h81QYcn_7NQeMQIJLM5uw3S2XPnzYif7y_LYewcx15ZY_kgKWOE4mx0YZvt4V_8h3_zSSVsAWvY3rz_H0TmknpCgczsXx6XfhW90CekcU0-nH39h9ocdtYy6uJ9cXDqsHFf45wSwL5A9tuQNRTzbwe6uIrNTWwNzz86O7jysD53YEeV2zCx625iXuoDYy3b6YJnHzgGmKRpdts7LzrGEoOanUDLYSgAAAAH-ZrzOAA")
+SESSION_STRING = os.environ.get("SESSION_STRING","BAIq0QoAX5mya6NENJII4U3gDEzpysbtycl61XAyJjoPoPyNzEhH4bhG9XwwT4AEbNP3FNlsmufFDkGf4ksTGWf6KNOOOlqNjrq7lGsnG88l2ZYeAkCCcM5TYtnfkjPVg5m1wuG7IwDlsg-ozJIeqnhB7PXr3RNnJegM8_VLBcmbIdso9l79SenaqhYp1Kqsfpew42KG6hXvtFc8shQHOhF2PTUWwm_pk144uE3_lu9bUim2O9dO1nER2L972CXa4tFoEW7x96jt4nod-FtC1Tkmob5KY6gxI0d_pp6eAxoLMt1BatECz-ttZVJ4tNpcxLDytuOlS4Edto_iHylF9nuxqzLPIQAAAAH-ZrzOAA")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyA3g-MQeBtMjRA57g6ainK71yJaelG1d_0")
 BOT_USERNAME = "Mishwariibot" 
 # ---------------------------------------------------------
