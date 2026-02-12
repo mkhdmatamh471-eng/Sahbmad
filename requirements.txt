@@ -1,5 +1,6 @@
-pyrogram
-tgcrypto
+telethon
 google-generativeai
 flask
-asyncio
+httpx
+cryptg
+python-dotenv
