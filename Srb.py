@@ -8,7 +8,8 @@ from pyrogram import Client, filters
 from flask import Flask # للتأكد من وجودها
 # تأكد أن ملف config.py يحتوي على normalize_text و CITIES_DISTRICTS
 from config import normalize_text, CITIES_DISTRICTS 
-from pyrogram import idle 
+from pyrogram import Client, filters, idle, enums  # أضف enums هنا
+ 
 # --- إعدادات الهوية ---
 
 
