@@ -1,42 +1,15 @@
 import asyncio
-import threading
-import sys
 import os
-import logging
 import re
-from http.server import BaseHTTPRequestHandler, HTTPServer
-from pyrogram import Client
-from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.constants import ParseMode
+import logging
+import threading # أضف هذا للـ Flask
 import google.generativeai as genai
-from datetime import datetime, timezone
-from flask import Flask  # أضف هذا السطر
-import threading
-from pyrogram import Client, filters  # تأكد من إضافة filters هنا
-from pyrogram import enums
+from pyrogram import Client, filters
+from flask import Flask # للتأكد من وجودها
+# تأكد أن ملف config.py يحتوي على normalize_text و CITIES_DISTRICTS
+from config import normalize_text, CITIES_DISTRICTS 
 
-# --- إعداد السجلات ---
-logging.basicConfig(level=logging.INFO)
-logging.getLogger("httpx").setLevel(logging.WARNING)
-logging.getLogger("pyrogram").setLevel(logging.WARNING)
-logging.getLogger("httpcore").setLevel(logging.WARNING)
-
-# --- استيراد الإعدادات ---
-# --- استيراد الإعدادات ودوال القاعدة ---
-try:
-    # أضف get_db_connection و release_db_connection هنا
-    from config import (
-        normalize_text, 
-        CITIES_DISTRICTS, 
-        BOT_TOKEN, 
-        get_db_connection, 
-        release_db_connection,
-        init_db  # إذا كنت تستدعيها في الأسفل
-    )
-    print("✅ تم تحميل الإعدادات ودوال قاعدة البيانات بنجاح")
-except Exception as e:
-    print(f"❌ خطأ في تحميل ملف config.py: {e}")
-    sys.exit(1)
+# --- إعدادات الهوية ---
 
 
 # --- متغيرات البيئة ---
@@ -44,17 +17,12 @@ API_ID = os.environ.get("API_ID", "36360458")
 API_HASH = os.environ.get("API_HASH", "daae4628b4b4aac1f0ebfce23c4fa272")
 SESSION_STRING = os.environ.get("SESSION_STRING", "BAIq0QoAhqQ7maNFOf6AUKx6sP1-w-GnmTM4GCyqL0INirrOO99rgvLN38CRda5n7P4vstDSL8lBamXl5i8urauRc3Zpq54NJsBdJyNy8pqhp9KzAGDoE1Lveo78y_81h81QYcn_7NQeMQIJLM5uw3S2XPnzYif7y_LYewcx15ZY_kgKWOE4mx0YZvt4V_8h3_zSSVsAWvY3rz_H0TmknpCgczsXx6XfhW90CekcU0-nH39h9ocdtYy6uJ9cXDqsHFf45wSwL5A9tuQNRTzbwe6uIrNTWwNzz86O7jysD53YEeV2zCx625iXuoDYy3b6YJnHzgGmKRpdts7LzrGEoOanUDLYSgAAAAH-ZrzOAA")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyA3g-MQeBtMjRA57g6ainK71yJaelG1d_0")
-
+BOT_USERNAME = "Mishwariibot" 
 # ---------------------------------------------------------
 # 🛠️ [تعديل 1] قائمة المستخدمين الذين سيستلمون الطلبات
 # ضع الـ IDs الخاصة بهم هنا (أرقام فقط)
 # ---------------------------------------------------------
 # 🛠️ قائمة الـ IDs المحدثة الذين سيستلمون الطلبات في الخاص (مفتوحة)
-TARGET_USERS = [
-    8563113166, 7897973056, 8123777916, 8181237063, 8246402319, 
-    6493378017, 7068172120, 1658903455, 1506018292, 1193267455, 
-    627214092, 336092598, 302374285, 987654321
-]
  # <--- ضع الآيديات الحقيقية هنا
 
 CHANNEL_ID = -1003763324430 
@@ -74,8 +42,10 @@ ai_model = genai.GenerativeModel(
 )
 
 # --- عملاء تليجرام ---
+# هذا هو المحرك الوحيد المطلوب في سيرفر الرادار
 user_app = Client("my_session", session_string=SESSION_STRING, api_id=API_ID, api_hash=API_HASH)
-bot_sender = Bot(token=BOT_TOKEN)
+
+# سطر bot_sender = Bot(token=BOT_TOKEN) قم بحذفه من هنا
 
 # ---------------------------------------------------------
 # قوائم الفلترة (كما هي في كودك الأصلي)
@@ -192,116 +162,6 @@ def manual_fallback_check(clean_text):
 # ---------------------------------------------------------
 # دالة البث للسائقين (معدلة للنظام الجديد - تستقبل بيانات نصية)
 # ---------------------------------------------------------
-async def broadcast_order_to_drivers(district, content, cust_id, cust_name):
-    print(f"📢 البوت يبدأ معالجة البث لحي: {district}")
-
-    # 1. تجهيز رابط التواصل باستخدام الآيدي القادم من البيانات
-    contact_url = f"tg://user?id={cust_id}"
-    
-    # 2. تجهيز نص الرسالة
-    base_text = (
-        f"🎯 <b>طلب مشوار جديد</b>\n"
-        f"📍 الحي: {district}\n"
-        f"👤 العميل: {cust_name}\n"
-        f"📝 التفاصيل: {content}\n"
-    )
-
-    conn = get_db_connection()
-    if not conn:
-        print("❌ فشل الاتصال بالقاعدة")
-        return
-
-    try:
-        with conn.cursor() as cur:
-            # جلب السائقين النشطين فقط
-            cur.execute("""
-                SELECT user_id, subscription_expiry 
-                FROM users 
-                WHERE is_blocked = FALSE AND TRIM(LOWER(role)) = 'driver'
-            """)
-            drivers = cur.fetchall()
-            
-            print(f"👥 جاري الإرسال لـ {len(drivers)} سائق...")
-
-            for user_id, expiry in drivers:
-                is_active = False
-                if expiry:
-                    # التأكد من التوقيت
-                    now = datetime.now(timezone.utc)
-                    is_active = (expiry > now)
-
-                # تحديد الزر بناءً على الاشتراك
-                if is_active:
-                    kb = InlineKeyboardMarkup([[InlineKeyboardButton("💬 مراسلة العميل", url=contact_url)]])
-                    footer = "\n✅ اشتراكك فعال"
-                else:
-                    kb = InlineKeyboardMarkup([[InlineKeyboardButton("💳 اشترك لتفعيل المراسلة", url="https://t.me/x3FreTx")]])
-                    footer = "\n⚠️ التواصل للمشتركين فقط"
-
-                try:
-                    await bot_sender.send_message(
-                        chat_id=int(user_id),
-                        text=base_text + footer,
-                        reply_markup=kb,
-                        parse_mode=ParseMode.HTML,
-                        disable_notification=False
-                    )
-                    # طباعة للتأكد (اختياري يمكن إزالته لتنظيف التيرمينال)
-                    # print(f"✅ تم الإرسال للسائق: {user_id}")
-                except Exception as e:
-                    print(f"⚠️ تخطي السائق {user_id}: {e}")
-                
-                # تأخير بسيط جداً لمنع الحظر (FloodWait)
-                await asyncio.sleep(0.05)
-
-    except Exception as e:
-        print(f"❌ خطأ عام في دالة البث: {e}")
-    finally:
-        release_db_connection(conn)
-        print("🏁 انتهت عملية البث للسائقين.")
-
-
-# ---------------------------------------------------------
-# دالة الإرسال للقناة (معدلة للنظام الجديد)
-# ---------------------------------------------------------
-async def notify_channel(district, content, cust_id):
-    if not content: return
-
-    try:
-        # الإعدادات
-        bot_username = "Mishwariibot" 
-
-        # تجهيز الروابط العميقة (Deep Links) باستخدام الآيدي النصي
-        gate_contact = f"https://t.me/{bot_username}?start=contact_{cust_id}"
-
-        buttons = [
-            [InlineKeyboardButton("💬 مراسلة العميل (للمشتركين)", url=gate_contact)],
-            [InlineKeyboardButton("💳 للاشتراك وتفعيل الحساب", url="https://t.me/x3FreTx")]
-        ]
-
-        keyboard = InlineKeyboardMarkup(buttons)
-
-        # ملاحظة: تم إزالة رابط المصدر (gate_source) لأنه يحتاج آيدي الرسالة الأصلية 
-        # واليوزر بوت يرسل البيانات كنص جديد، لكن الرابط الأساسي (المراسلة) يعمل 100%
-        alert_text = (
-            f"🎯 <b>طلب مشوار جديد</b>\n\n"
-            f"📍 <b>المنطقة:</b> {district}\n"
-            f"📝 <b>التفاصيل:</b>\n<i>{content}</i>\n\n"
-            f"⏰ <b>الوقت:</b> {datetime.now().strftime('%H:%M:%S')}\n"
-            f"⚠️ <i>الروابط أعلاه تفتح للمشتركين فقط.</i>"
-        )
-
-        await bot_sender.send_message(
-            chat_id=CHANNEL_ID,
-            text=alert_text,
-            reply_markup=keyboard,
-            parse_mode=ParseMode.HTML
-        )
-        print(f"✅ تم الإرسال للقناة بنجاح: {district}")
-
-    except Exception as e:
-        print(f"❌ خطأ إرسال للقناة: {e}")
-
 # ---------------------------------------------------------
 # 4. الرادار الرئيسي
 # ---------------------------------------------------------
@@ -311,20 +171,16 @@ async def notify_channel(district, content, cust_id):
 # ---------------------------------------------------------
 @user_app.on_message(filters.group & ~filters.service)
 async def handle_new_messages(client, message):
-    # طباعة اسم الجروب للتأكد من المتابعة
-    chat_title = message.chat.title or "جروب غير معروف"
-    print(f"📥 الرادار استلم رسالة من [{chat_title}]")
-
     try:
         text = message.text or message.caption
         if not text or (message.from_user and message.from_user.is_self):
             return
 
-        # التحليل بالذكاء الاصطناعي
+        # 1. التحليل بالذكاء الاصطناعي
         is_valid = await analyze_message_hybrid(text)
 
         if is_valid:
-            # استخراج الحي
+            # 2. استخراج الحي
             found_d = "عام"
             text_c = normalize_text(text)
             for city, districts in CITIES_DISTRICTS.items():
@@ -333,12 +189,8 @@ async def handle_new_messages(client, message):
                         found_d = d
                         break
             
-            # --- [التغيير الجوهري] ---
-            # بدلاً من الإرسال المباشر، نرسل البيانات للبوت الموزع
+            # 3. إرسال "حزمة البيانات" للبوت الموزع عبر الخاص
             customer = message.from_user
-            
-            # تجهيز "حزمة بيانات" مشفرة ليستلمها البوت
-            # نستخدم فواصل واضحة لنتمكن من فصل البيانات لاحقاً
             transfer_data = (
                 f"#ORDER_DATA#\n"
                 f"DISTRICT:{found_d}\n"
@@ -347,62 +199,18 @@ async def handle_new_messages(client, message):
                 f"CONTENT:{text}"
             )
             
-            # ⚠️ هام جداً: استبدل YOUR_BOT_USERNAME بمعرف بوتك (بدون @)
-            # مثال: await user_app.send_message("TaxiMadinahBot", transfer_data)
-            await user_app.send_message("Mishwariibot", transfer_data) 
-            
-            print(f"✅ تم تحويل الطلب ({found_d}) إلى البوت الموزع.")
+            # اليوزر بوت يرسل الرسالة لنفسه (إلى بوت التوزيع)
+            await user_app.send_message(BOT_USERNAME, transfer_data) 
+            print(f"✅ [رادار] تم قنص طلب في ({found_d}) وتحويله للبوت.")
 
     except Exception as e:
-        logging.error(f"Error handling message: {e}")
+        logging.error(f"⚠️ خطأ في معالجة الرسالة: {e}")
 
 # ---------------------------------------------------------
 # 5. معالج البوت الموزع (يستقبل من الرادار ويوزع)
 # ---------------------------------------------------------
-@bot_sender.on_message(filters.private & filters.regex("#ORDER_DATA#"))
-async def bot_distribution_handler(client, message):
-    try:
-        # تقطيع البيانات المستلمة من اليوزر بوت
-        data = message.text.split("\n")
-        
-        # استخراج القيم (تعتمد على الترتيب الذي وضعناه في الرادار)
-        # DISTRICT:Name -> نأخذ ما بعد النقطتين
-        district = data[1].split(":", 1)[1]
-        cust_id = data[2].split(":", 1)[1]
-        cust_name = data[3].split(":", 1)[1]
-        # المحتوى قد يحتوي على أسطر جديدة، لذا نأخذ الباقي
-        content = data[4].split(":", 1)[1]
-
-        print(f"🤖 البوت الموزع استلم طلباً لحي: {district}")
-
-        # تشغيل البث في الخلفية (Parallel Tasks)
-        # لاحظ أننا نمرر البيانات كنصوص الآن وليس كأوبجكت رسالة
-        asyncio.create_task(broadcast_to_drivers_logic(district, content, cust_id, cust_name))
-        asyncio.create_task(notify_channel_logic(district, content, cust_id))
-        
-    except Exception as e:
-        print(f"❌ خطأ في معالج التوزيع بالبوت: {e}")
 
 # دالة التشغيل التي تضمن بقاء العميل متصلاً
-async def main_run():
-    print("🚀 جاري تشغيل النظام (الرادار + البوت الموزع)...")
-    
-    # تشغيل الاثنين معاً
-    await user_app.start()
-    await bot_sender.start()
-    
-    print("✅ النظام يعمل! الرادار يراقب، والبوت جاهز للتوزيع.")
-    
-    # كود قراءة الجروبات (للرادار)
-    try:
-        async for dialog in user_app.get_dialogs(limit=None):
-            if dialog.chat.type in [enums.ChatType.GROUP, enums.ChatType.SUPERGROUP]:
-                pass 
-        print("📋 تم تحديث قائمة الجروبات.")
-    except Exception as e:
-        print(f"⚠️ تنبيه مزامنة: {e}")
-        
-    await asyncio.Event().wait()
 
 # --- خادم الويب (Health Check) ---
 app = Flask(__name__)
@@ -418,23 +226,37 @@ def run_flask():
     # تشغيل الفلاسك على 0.0.0.0 ضروري ليعمل على السيرفر
     app.run(host='0.0.0.0', port=port)
 
+async def main_run():
+    print("🚀 جاري تشغيل (سيرفر الرادار) فقط...")
+    await user_app.start()
+    
+    print("📋 جاري مزامنة المجموعات...")
+    try:
+        async for dialog in user_app.get_dialogs(limit=None):
+            # هذه الخطوة تجعل الحساب يتعرف على المجموعات برمجياً
+            pass 
+        print("✅ الرادار يراقب جميع المجموعات الآن.")
+    except Exception as e:
+        print(f"⚠️ تنبيه مزامنة: {e}")
+        
+    await asyncio.Event().wait()
+
 
 if __name__ == "__main__":
-    # 1. تشغيل الفلاسك في خلفية منفصلة تماماً
+    # 1. تشغيل الفلاسك (Health Check) لضمان بقاء السيرفر حياً (مهم لـ Render/Heroku)
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
 
-    # 2. تهيئة القاعدة
-    try:
-        init_db()
-    except:
-        pass
+    # 2. حذفنا تهيئة قاعدة البيانات من هنا لأنها انتقلت لسيرفر البوت
 
-    # 3. تشغيل العميل بأمان
+    # 3. تشغيل اليوزر بوت (الرادار)
     loop = asyncio.get_event_loop()
     try:
+        # تأكد أن اسم الدالة هو main_run وأنها تحتوي على user_app.start()
         loop.run_until_complete(main_run())
     except KeyboardInterrupt:
-        loop.run_until_complete(user_app.stop())
+        # إغلاق آمن عند إيقاف السيرفر
+        if user_app.is_connected:
+            loop.run_until_complete(user_app.stop())
     finally:
-        loop.close()
+        print("📴 تم إيقاف سيرفر الرادار.")
