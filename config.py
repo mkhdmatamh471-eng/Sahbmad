@@ -5,8 +5,6 @@ import asyncio
 # --- تعريف رابط قاعدة البيانات ---
 BOT_TOKEN = "8498451295:AAGt1R7THllSjYtEe5hvIEPnPhRkS_iBcnU"
 # نقوم بجلب الرابط من متغيرات البيئة (Environment Variables) لضمان الأمان
-DB_URL = os.environ.get("DATABASE_URL")
-
 # تصحيح الرابط ليتوافق مع مكتبة psycopg2 (خاصة عند الاستخدام مع Render/Heroku)
 if DB_URL and DB_URL.startswith("postgres://"):
     DB_URL = DB_URL.replace("postgres://", "postgresql://", 1)
