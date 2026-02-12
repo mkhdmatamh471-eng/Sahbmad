@@ -43,10 +43,12 @@ generation_config = {
   "max_output_tokens": 5,
 }
 # اذهب إلى قسم إعداد Gemini وغير هذا السطر:
-ai_model = genai.GenerativeModel(
-    model_name='gemini-1.5-flash-latest', # أضف كلمة latest
+# التعديل الصحيح لضمان عدم حدوث خطأ 404
+Ai_model = genai.GenerativeModel(
+    model_name='gemini-1.5-flash', # احذف كلمة -latest لضمان الاستقرار
     generation_config=generation_config
 )
+
 
 # --- عملاء تليجرام ---
 # هذا هو المحرك الوحيد المطلوب في سيرفر الرادار
