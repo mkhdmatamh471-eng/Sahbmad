@@ -46,9 +46,6 @@ else:
 
 # --- عملاء تليجرام ---
 # هذا هو المحرك الوحيد المطلوب في سيرفر الرادار
-user_app = Client("my_session", session_string=SESSION_STRING, api_id=API_ID, api_hash=API_HASH)
-
-# سطر bot_sender = Bot(token=BOT_TOKEN) قم بحذفه من هنا
 
 # ---------------------------------------------------------
 # قوائم الفلترة (كما هي في كودك الأصلي)
