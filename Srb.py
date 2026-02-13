@@ -118,26 +118,52 @@ def analyze_message_manual(text):
 
     clean_text = normalize_text(text)
 
-    # 1. فحص المستبعدات (الكلمات السوداء)
-    if any(k in clean_text for k in EXCLUDE_KEYWORDS):
+    # 1. قائمة الاستبعاد المحدثة (تتضمن كلمات الدردشة والاستفسارات)
+    # أضفنا: اللي يعرف، رد عليه، سؤال، استفسار
+    CHAT_KEYWORDS = [
+        "اللي يعرف", "احد يعرف", "تعرفون", "ممكن احد", "رد عليه", "رد عليها",
+        "سؤال", "استفسار", "ياخوان", "يا شباب", "كيف طريقة", "وش رايكم"
+    ]
+    # دمج قوائم الاستبعاد
+    ALL_EXCLUDES = EXCLUDE_KEYWORDS + CHAT_KEYWORDS
+    
+    if any(k in clean_text for k in ALL_EXCLUDES):
         return False
 
-    # 2. فحص نمط المسار المطور (من ... إلى/الى/الي/لـ)
-    # يدعم: "من بئر عثمان الي حي القبلتين"
+    # 2. فحص نمط المسار الصريح (الأقوى)
+    # مثال: "من المطار الى الحرم" - يقبلها فوراً حتى بدون اسم حي
     route_pattern = r"(^|\s)من\s+.*?\s+(إلى|الى|الي|لـ|للمطار|للحرم|للجامعة)(\s|$)"
     if re.search(route_pattern, clean_text):
         return True 
 
-    # 3. فحص الجمع بين (كلمة طلب + نوع خدمة)
-    # يدعم: "احتاج" + "توصيل" أو "ابي" + "سيارة"
+    # 3. فحص الجمع الذكي (طلب + خدمة + حي)
+    # المشكلة كانت هنا سابقاً، الآن اشترطنا وجود "حي" لقبول الطلب
+    
     has_order_word = any(word in clean_text for word in ORDER_INDICATORS)
+    # (INDICATORS: ابي، ابغى، محتاج، مطلوب، ضروري...)
+    
     has_service_word = any(word in clean_text for word in SERVICE_TYPES)
+    # (SERVICE_TYPES: توصيل، مشوار، سواق، سيارة...)
 
-    if has_order_word and has_service_word:
+    # البحث عن اسم حي (شرط الأمان الجديد)
+    has_district = False
+    for city, districts in CITIES_DISTRICTS.items():
+        for d in districts:
+            # تنظيف اسم الحي والمقارنة
+            if normalize_text(d) in clean_text:
+                has_district = True
+                break
+        if has_district: break
+
+    # القاعدة الجديدة:
+    # نقبل الرسالة فقط إذا كان فيها (طلب + خدمة + حي)
+    # مثال: "ابي (طلب) مشوار (خدمة) من الشوقية (حي)" -> ✅ مقبول
+    # مثال: "اللي يعرف ضروري (طلب) رد عليه" -> ❌ مرفوض (لا يوجد حي ولا خدمة واضحة)
+    if has_order_word and has_service_word and has_district:
         return True
 
-    # 4. فحص كلمات العقود والدوامات
-    contract_words = ["شهري", "عقد", "مدارس", "طالبات", "موظفات", "دوام", "مشاوير"]
+    # 4. استثناء للعقود والمدارس (عادة لا يذكرون الحي بالتفصيل ولكن الكلمات واضحة)
+    contract_words = ["شهري", "عقد", "مدارس", "طالبات", "موظفات", "دوام"]
     if any(word in clean_text for word in contract_words) and has_order_word:
         return True
 
