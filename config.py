@@ -4,13 +4,9 @@ import asyncio
 
 # --- 1. إصلاح تعريف الروابط والمتغيرات ---
 # جلب الرابط من البيئة، وإذا لم يوجد نضع قيمة فارغة لتجنب الـ NameError
-DB_URL = os.environ.get("DATABASE_URL", "") 
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "8498451295:AAGt1R7THllSjYtEe5hvIEPnPhRkS_iBcnU")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
-# تصحيح الرابط فقط إذا كان موجوداً
-if DB_URL and DB_URL.startswith("postgres://"):
-    DB_URL = DB_URL.replace("postgres://", "postgresql://", 1)
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "8498451295:AAGt1R7THllSjYtEe5hvIEPnPhRkS_iBcnU")
+
 
 # --- 2. إعدادات الأحياء (المدينة المنورة) ---
 CITIES_DISTRICTS = {
