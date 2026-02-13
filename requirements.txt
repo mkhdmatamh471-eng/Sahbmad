@@ -1,6 +1,3 @@
 telethon
-google-generativeai
 flask
-httpx
 cryptg
-python-dotenv
