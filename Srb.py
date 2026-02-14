@@ -200,7 +200,7 @@ async def handle_new_messages(event):
             # استبدل 'Your_Bot_Username' بمعرف بوتك الموزع (بدون @ أو بها حسب المكتبة)
             try:
                 # يفضل استخدام المعرف (Username) للبوت هنا
-                await client.send_message('Mishweribot', order_payload)
+                await client.send_message('Mishwariibot', order_payload)
                 print(f"✅ تم تحويل الطلب بنجاح للبوت الموزع")
 
             except Exception as e:
