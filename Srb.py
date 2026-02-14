@@ -26,7 +26,7 @@ except ImportError:
 API_ID = os.environ.get("API_ID", "33888256")
 API_HASH = os.environ.get("API_HASH", "bb1902689a7e203a7aedadb806c08854")
 SESSION_STRING = os.environ.get("SESSION_STRING", "1BJWap1sBu4bXxhDoqK2B97o-DjpEV7umk88iqLAlItSloo3Q1duodmP22oIjGT8Bu0QId2o1aRDEQLz3ypZ_rnDNKIF9AjwasYPLOWipFnGm1DP4uYJcj4H-hhz5BbJm7rq5H6JI0M3jePb2_BvL-0EcWYvrO1vOAdH-oPaejD1B9tUPnx5Zf11xbURcgHT2ekBpL1BoofC9NNsYu04AnwFjRQ6HcGhagNhGBCJSYmWshy-fFdo5iYCsBp9AD-AMCsBFj32mLZnnLxN9CqEUTCbsvuJR3I35leXBwcFOhx7ZmmT9T_tGbAAJasw0JgdChqZJAMVkfejmyhTq_7EGd4PguYHC-qU=")
-BOT_USERNAME = "Mishweribot" 
+BOT_USERNAME = "Mishwariibot" 
 # آيدي القروب الخاص بالسائقين (تأكد من كتابته بشكل صحيح، يبدأ بـ -100)
 PRIVATE_DRIVERS_GROUP_ID = -1005136174968 
 
