@@ -23,11 +23,10 @@ except ImportError:
     CITIES_DISTRICTS = {}
 
 # --- إعدادات الحساب والبوت ---
-API_ID = os.environ.get("API_ID", "36360458")
-API_HASH = os.environ.get("API_HASH", "daae4628b4b4aac1f0ebfce23c4fa272")
-# ⚠️ انتبه: كود جلسة Pyrogram لا يعمل هنا. قم بتوليد كود جديد أو تسجيل الدخول لأول مرة.
-SESSION_STRING = os.environ.get("TELETHON_SESSION", "1BJWap1sBuyfIQ9CyhEsZ-f9Xo4W1pr24lihTxGhG_Lrkv25fXoe_HFNLnH0KFqQiXYsMuR_8gzff_3pZLDXF4Q8VUCAQdH_TA_x4z7P8byAP4gTJUc6SNucFy6bznjDHSBnJZht4rrrrwUU9wSeQvsvmP0imFJMFhutiX91CxHYLZVWivexnRXb5h8r_0szwlll1-nbULa7yTc7zx7R2AxcpwRGhGfDCz75HfAKx-YJ9LJZPqU5_dEvyFoC2LssEakTy_gl2tgU9Hy2dLq8HL6Bu-K6GugoAZ6tC83znjckwk_DgWeU9kwOYOms3amFf54JdIf7ML25n9zSkM9WaSR-C_9FD3n4=") 
-BOT_USERNAME = "Mishwariibot" 
+API_ID = os.environ.get("API_ID", "33888256")
+API_HASH = os.environ.get("API_HASH", "bb1902689a7e203a7aedadb806c08854")
+SESSION_STRING = os.environ.get("SESSION_STRING", "1BJWap1sBu4bXxhDoqK2B97o-DjpEV7umk88iqLAlItSloo3Q1duodmP22oIjGT8Bu0QId2o1aRDEQLz3ypZ_rnDNKIF9AjwasYPLOWipFnGm1DP4uYJcj4H-hhz5BbJm7rq5H6JI0M3jePb2_BvL-0EcWYvrO1vOAdH-oPaejD1B9tUPnx5Zf11xbURcgHT2ekBpL1BoofC9NNsYu04AnwFjRQ6HcGhagNhGBCJSYmWshy-fFdo5iYCsBp9AD-AMCsBFj32mLZnnLxN9CqEUTCbsvuJR3I35leXBwcFOhx7ZmmT9T_tGbAAJasw0JgdChqZJAMVkfejmyhTq_7EGd4PguYHC-qU=")
+BOT_USERNAME = "Mishweribot" 
 # آيدي القروب الخاص بالسائقين (تأكد من كتابته بشكل صحيح، يبدأ بـ -100)
 PRIVATE_DRIVERS_GROUP_ID = -1005136174968 
 
@@ -36,24 +35,21 @@ client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
 # --- محرك الفلترة اليدوي ---
 # قائمة الكلمات السوداء (تمنع السحب)
 EXCLUDE_KEYWORDS = [
-    # كلمات الرسالة التي أرسلتها (إعلانات تعريفية)
+    # كلمات الرسالة التعريفية وإعلانات السائقين
     "أسرع خدمه", "اطلب مشوارك", "أقرب سائق", "موقعك", "أبدأ مشوارك", "بأسرع وقت",
-     # --- العبارات الموجودة في رسالة التذكير التي أرسلتها ---
-    "تذكير تلقائي",
-    "خدمة توصيل المدينة المنورة",
-    "هل تحتاج إلى مشوار سريع",
-    "نحن هنا لخدمتك",
-    "على مدار الساعة",
-    "لطلب كابتن فوراً",   
-    # كلمات متعلقة بإعلانات السائقين (الخدمات الذاتية)
+    "تذكير تلقائي", "خدمة توصيل المدينة المنورة", "هل تحتاج إلى مشوار سريع",
+    "نحن هنا لخدمتك", "على مدار الساعة", "لطلب كابتن فوراً",   
     "متواجد", "متاح", "شغال", "جاهز", "أسعارنا", "اسعارنا", "سيارة نظيفة", 
     "توصيل مشاوير", "أوصل", "اوصل", "بخدمتكم", "أستقبل", "استقبل", "كابتن موثوق",
-    
-    # كلمات متعلقة بإدارة القروبات (التحذيرات والإعلانات الإدارية)
+     
+    # كلمات التعقيب الجديدة بناءً على هذه الرسالة
+    "هروب مهني", "بلاغ هروب", "خروج نهائي", "تجديد اقامة", "كرت عمل", 
+    "استخراج تاشيرات", "حجب المخالفات", "تعديل المهنه", "تعديل مهني",
+    # كلمات الإدارة والقروبات
     "إدارة القروب", "ادارة القروب", "حرصا منا", "سلامتكم", "انتبه", "مرشحين لكم", 
     "موثوق لـ", "المرشحين", "قواعد القروب", "قوانين القروب",
     
-    # كلمات النصب والخدمات الطبية المزورة (سكليفات)
+    # كلمات السكليفات (تزوير)
     "سكليف", "سكليفات", "عذر طبي", "اعذار طبيه", "أعذار طبية", "اجازة مرضية", 
     "منصة صحتي", "صحتي", "تنزيل اعذار", "مرضي", "مريض",
     
@@ -61,13 +57,15 @@ EXCLUDE_KEYWORDS = [
     "استثمار", "ارباح", "أرباح", "تداول", "عملات رقمية", "دولار", "منصة", 
     "اربح", "دخل إضافي", "عمل عن بعد", "تحويل مبالغ", "توزيع جوائز",
     
-    # كلمات التعقيب والخدمات الحكومية
+    # كلمات التعقيب والخدمات العامة
     "معقب", "تعقيب", "استقدام", "تفاويض", "إنجاز", "انجاز", "تسديد مخالفات", 
     "قروض", "قرض", "تمويل", "بنك", "نقل كفالة", "تعديل مهنة",
     
     # الإعلانات العامة والروابط
-    "اعلان", "إعلان", "مساج", 
-    "t.me", "http", ".com", "رابط", "قروبنا", "انضموا"
+    "اعلان", "إعلان", "مساج", "t.me", "http", ".com", "رابط", "قروبنا", "انضموا",
+
+    # --- كلمات الرسائل غير اللائقة والنصب بالبطاقات (إضافة جديدة) ---
+    "خاضعات", "عمات", "عمولتي", "لايك كارد", "بطاقة سوا", "اثباتي بلبايو", "بمقابل", "أوفر لك طلبك"
 ]
 
 # كلمات الطلب (يجب وجود واحدة منها على الأقل)
@@ -124,52 +122,26 @@ def analyze_message_manual(text):
 
     clean_text = normalize_text(text)
 
-    # 1. قائمة الاستبعاد المحدثة (تتضمن كلمات الدردشة والاستفسارات)
-    # أضفنا: اللي يعرف، رد عليه، سؤال، استفسار
-    CHAT_KEYWORDS = [
-        "اللي يعرف", "احد يعرف", "تعرفون", "ممكن احد", "رد عليه", "رد عليها",
-        "سؤال", "استفسار", "ياخوان", "يا شباب", "كيف طريقة", "وش رايكم"
-    ]
-    # دمج قوائم الاستبعاد
-    ALL_EXCLUDES = EXCLUDE_KEYWORDS + CHAT_KEYWORDS
-    
-    if any(k in clean_text for k in ALL_EXCLUDES):
+    # 1. فحص المستبعدات (الكلمات السوداء)
+    if any(k in clean_text for k in EXCLUDE_KEYWORDS):
         return False
 
-    # 2. فحص نمط المسار الصريح (الأقوى)
-    # مثال: "من المطار الى الحرم" - يقبلها فوراً حتى بدون اسم حي
+    # 2. فحص نمط المسار المطور (من ... إلى/الى/الي/لـ)
+    # يدعم: "من بئر عثمان الي حي القبلتين"
     route_pattern = r"(^|\s)من\s+.*?\s+(إلى|الى|الي|لـ|للمطار|للحرم|للجامعة)(\s|$)"
     if re.search(route_pattern, clean_text):
         return True 
 
-    # 3. فحص الجمع الذكي (طلب + خدمة + حي)
-    # المشكلة كانت هنا سابقاً، الآن اشترطنا وجود "حي" لقبول الطلب
-    
+    # 3. فحص الجمع بين (كلمة طلب + نوع خدمة)
+    # يدعم: "احتاج" + "توصيل" أو "ابي" + "سيارة"
     has_order_word = any(word in clean_text for word in ORDER_INDICATORS)
-    # (INDICATORS: ابي، ابغى، محتاج، مطلوب، ضروري...)
-    
     has_service_word = any(word in clean_text for word in SERVICE_TYPES)
-    # (SERVICE_TYPES: توصيل، مشوار، سواق، سيارة...)
 
-    # البحث عن اسم حي (شرط الأمان الجديد)
-    has_district = False
-    for city, districts in CITIES_DISTRICTS.items():
-        for d in districts:
-            # تنظيف اسم الحي والمقارنة
-            if normalize_text(d) in clean_text:
-                has_district = True
-                break
-        if has_district: break
-
-    # القاعدة الجديدة:
-    # نقبل الرسالة فقط إذا كان فيها (طلب + خدمة + حي)
-    # مثال: "ابي (طلب) مشوار (خدمة) من الشوقية (حي)" -> ✅ مقبول
-    # مثال: "اللي يعرف ضروري (طلب) رد عليه" -> ❌ مرفوض (لا يوجد حي ولا خدمة واضحة)
-    if has_order_word and has_service_word and has_district:
+    if has_order_word and has_service_word:
         return True
 
-    # 4. استثناء للعقود والمدارس (عادة لا يذكرون الحي بالتفصيل ولكن الكلمات واضحة)
-    contract_words = ["شهري", "عقد", "مدارس", "طالبات", "موظفات", "دوام"]
+    # 4. فحص كلمات العقود والدوامات
+    contract_words = ["شهري", "عقد", "مدارس", "طالبات", "موظفات", "دوام", "مشاوير"]
     if any(word in clean_text for word in contract_words) and has_order_word:
         return True
 
@@ -228,7 +200,7 @@ async def handle_new_messages(event):
             # استبدل 'Your_Bot_Username' بمعرف بوتك الموزع (بدون @ أو بها حسب المكتبة)
             try:
                 # يفضل استخدام المعرف (Username) للبوت هنا
-                await client.send_message('Mishwariibot', order_payload)
+                await client.send_message('Mishweribot', order_payload)
                 print(f"✅ تم تحويل الطلب بنجاح للبوت الموزع")
 
             except Exception as e:
