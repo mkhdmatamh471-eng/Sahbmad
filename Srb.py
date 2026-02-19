@@ -187,7 +187,7 @@ def analyze_message_manual(text):
 # --- معالجة الرسائل ---
 @client.on(events.NewMessage(incoming=True))
 async def handle_new_messages(event):
-    # 1. التأكد من أن الرسالة من مجموعة وليس خاص
+    # التأكد من أن الرسالة من مجموعة وليس خاص
     if not event.is_group: 
         return
 
@@ -196,11 +196,11 @@ async def handle_new_messages(event):
         if not text: 
             return
 
-        # فحص مطابقة الرسالة لشروط القنص (كلمات مثل مشوار، توصيل..)
+        # فحص مطابقة الرسالة لشروط القنص
         if analyze_message_manual(text):
             print(f"🎯 [قنص] طلب مطابق: {text[:40]}...")
 
-            # 2. تحديد الحي (البحث في أحياء نجران ومدن القاموس)
+            # 1. تحديد الحي (المنطقة)
             found_d = "عام"
             text_c = normalize_text(text)
             for city, districts in CITIES_DISTRICTS.items():
@@ -209,37 +209,40 @@ async def handle_new_messages(event):
                         found_d = d
                         break
 
-            # 3. جلب بيانات المرسل (العميل)
+            # 2. جلب بيانات المرسل (العميل)
             sender = await event.get_sender()
-            sender_id = sender.id if sender else 0 # المعرف الرقمي الأساسي
+            sender_id = sender.id if sender else 0
             sender_name = getattr(sender, 'first_name', 'عميل')
             username = getattr(sender, 'username', None)
 
-            # 4. تجهيز الروابط
+            # 3. تجهيز الروابط (يتم إرسالها للبوت الموزع ليختار الأنسب)
             user_url = f"https://t.me/{username}" if username else "None"
+
+            # تنظيف الآيدي من -100 لإنشاء رابط الرسالة (Message Link)
             chat_id_clean = str(event.chat_id).replace("-100", "")
             msg_link = f"https://t.me/c/{chat_id_clean}/{event.id}"
 
-            # 5. صياغة "طرد البيانات" المحدث (إضافة CUST_ID)
-            # تم إضافة سطر CUST_ID ليستخدمه البوت الموزع في رابط openmessage
+            # 4. صياغة "طرد البيانات" المرسل للبوت الموزع
+            # ملاحظة: نستخدم وسم #ORDER_DATA# ليعرف البوت أن هذه رسالة تحويل طلبات
             order_payload = (
                 f"#ORDER_DATA#\n"
                 f"DISTRICT:{found_d}\n"
                 f"CUST_NAME:{sender_name}\n"
-                f"CUST_ID:{sender_id}\n"
                 f"CONTENT:{text}\n"
                 f"USERNAME:{user_url}\n"
                 f"MSG_LINK:{msg_link}"
             )
 
-            # 6. إرسال البيانات للبوت الموزع (Mishwariibot)
+            # 5. إرسال البيانات للبوت الموزع (الرسمي)
+            # استبدل 'Your_Bot_Username' بمعرف بوتك الموزع (بدون @ أو بها حسب المكتبة)
             try:
+                # يفضل استخدام المعرف (Username) للبوت هنا
                 await client.send_message('Mishwariibot', order_payload)
-                print(f"✅ تم التحويل بنجاح | العميل: {sender_name} | المعرف: {sender_id}")
+                print(f"✅ تم تحويل الطلب بنجاح للبوت الموزع")
 
             except Exception as e:
                 print(f"❌ فشل التحويل للبوت الموزع: {e}")
-                # خيار احتياطي في حال تعطل البوت الموزع
+                # خيار احتياطي: الإرسال للقروب الخاص مباشرة في حال تعطل البوت الموزع
                 try:
                     await client.send_message(-1005136174968, "⚠️ فشل التحويل للبوت، إرسال احتياطي:\n" + order_payload)
                 except:
@@ -247,7 +250,6 @@ async def handle_new_messages(event):
 
     except Exception as e:
         print(f"⚠️ خطأ عام في الدالة: {e}")
-
 # تأكد أن هذا السطر يبدأ من بداية السطر تماماً (بدون أي مسافات قبله)
 app = Flask(__name__)
 @app.route('/')
