@@ -251,34 +251,54 @@ async def handle_new_messages(event):
     except Exception as e:
         print(f"⚠️ خطأ عام في الدالة: {e}")
 # تأكد أن هذا السطر يبدأ من بداية السطر تماماً (بدون أي مسافات قبله)
+# --- إعداد Flask لإرضاء منصة Render ---
 app = Flask(__name__)
+
 @app.route('/')
-def home(): return "Radar Online", 200
+def home():
+    return "Radar Online - System is Active", 200
 
 def run_flask():
-    app.run(host='0.0.0.0', port=8080)
+    # Render يمرر المنفذ عبر متغير البيئة PORT تلقائياً
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
 
-# --- التشغيل الرئيسي ---
+# --- التشغيل الرئيسي المطور ---
 async def main():
     print("📡 جاري الاتصال بتليجرام...")
+    # بدء الجلسة باستخدام SESSION_STRING
     await client.start()
 
     me = await client.get_me()
-    print(f"✅ متصل كـ: {me.first_name}")
+    print(f"✅ متصل كـ: {me.first_name} (@{me.username})")
 
     print("🔄 تحديث قائمة المجموعات...")
     await client.get_dialogs()
 
-    print("🚀 الرادار يعمل الآن في تيرمكس..")
+    print("🚀 الرادار يعمل الآن ويبحث عن الطلبات...")
+    
+    # الحفاظ على اتصال البوت حياً
     await client.run_until_disconnected()
 
 if __name__ == "__main__":
+    # 1. تشغيل Flask في خيط (Thread) منفصل لفتح المنفذ فوراً
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
+    print("🌐 Flask server started on port 8080")
+
+    # 2. إدارة حلقة الأحداث (Event Loop) بشكل متوافق مع بايثون 3.12+
     try:
-        import asyncio
-        # الطريقة الحديثة التي تنشئ الـ loop وتديره تلقائياً
-        asyncio.run(main()) 
-    except RuntimeError:
-        # حل احتياطي في حال وجود loop عالقة (غالباً في بيئات معينة)
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(main())
+        asyncio.run(main())
+    except (RuntimeError, KeyboardInterrupt):
+        # حل مشكلة "no current event loop" في بعض البيئات
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(main())
+            else:
+                loop.run_until_complete(main())
+        except Exception as e:
+            # الحل الأخير في حال تعقدت الأمور (لبيئات مثل Render/Termux)
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            new_loop.run_until_complete(main())
