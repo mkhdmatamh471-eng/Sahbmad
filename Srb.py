@@ -273,9 +273,12 @@ async def main():
     await client.run_until_disconnected()
 
 if __name__ == "__main__":
-    threading.Thread(target=run_flask, daemon=True).start()
-    loop = asyncio.get_event_loop()
     try:
+        import asyncio
+        # الطريقة الحديثة التي تنشئ الـ loop وتديره تلقائياً
+        asyncio.run(main()) 
+    except RuntimeError:
+        # حل احتياطي في حال وجود loop عالقة (غالباً في بيئات معينة)
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         loop.run_until_complete(main())
-    except KeyboardInterrupt:
-        print("🛑 توقف.")
