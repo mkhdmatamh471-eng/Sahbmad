@@ -215,12 +215,18 @@ async def handle_new_messages(event):
             sender_name = getattr(sender, 'first_name', 'عميل')
             username = getattr(sender, 'username', None)
 
-            # 3. تجهيز الروابط (يتم إرسالها للبوت الموزع ليختار الأنسب)
+               # 3. تجهيز الروابط (تعديل لضمان سهولة الفتح)
             user_url = f"https://t.me/{username}" if username else "None"
-
-            # تنظيف الآيدي من -100 لإنشاء رابط الرسالة (Message Link)
-            chat_id_clean = str(event.chat_id).replace("-100", "")
-            msg_link = f"https://t.me/c/{chat_id_clean}/{event.id}"
+            
+            # جلب بيانات الدردشة للتأكد من نوع الرابط
+            chat = await event.get_chat()
+            if getattr(chat, 'username', None):
+                # إذا كانت المجموعة عامة، نستخدم الـ username
+                msg_link = f"https://t.me/{chat.username}/{event.id}"
+            else:
+                # إذا كانت خاصة، نستخدم رابط البروتوكول المباشر (أفضل للفتح من المتصفح)
+                chat_id_clean = str(event.chat_id).replace("-100", "")
+                msg_link = f"tg://privatepost?channel={chat_id_clean}&post={event.id}"
 
             # 4. صياغة "طرد البيانات" المرسل للبوت الموزع
             # ملاحظة: نستخدم وسم #ORDER_DATA# ليعرف البوت أن هذه رسالة تحويل طلبات
@@ -250,6 +256,7 @@ async def handle_new_messages(event):
 
     except Exception as e:
         print(f"⚠️ خطأ عام في الدالة: {e}")
+# تأكد أن هذا السطر يبدأ من بداية السطر تماماً (بدون أي مسافات قبله)
 # تأكد أن هذا السطر يبدأ من بداية السطر تماماً (بدون أي مسافات قبله)
 # --- إعداد Flask لإرضاء منصة Render ---
 app = Flask(__name__)
