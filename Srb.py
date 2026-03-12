@@ -30,7 +30,7 @@ BOT_USERNAME = "Mishwariibot"
 # آيدي القروب الخاص بالسائقين (تأكد من كتابته بشكل صحيح، يبدأ بـ -100)
 PRIVATE_DRIVERS_GROUP_ID = -1005136174968 
 
-client = TelegramClient(StringSession(TELETHON_SESSION), API_ID, API_HASH)
+client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
 
 DISTRICT_COORDS = {
 
