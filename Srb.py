@@ -1,90 +1,358 @@
+import asyncio
 import os
+import re
 import logging
 import threading
 from flask import Flask
-import google.generativeai as genai
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
-from pypdf import PdfReader
 
-# --- إعداد Flask ---
-server = Flask(__name__)
+# --- استيرادات Telethon ---
+from telethon import TelegramClient, events
+from telethon.sessions import StringSession
 
-@server.route('/')
-def home():
-    return "Bot is Running!"
+# إعداد السجلات بشكل مبسط وواضح
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
+
+# محاولة استيراد الإعدادات من ملف config.py
+try:
+    from config import normalize_text, CITIES_DISTRICTS
+except ImportError:
+    def normalize_text(t):
+        # دالة بسيطة لتوحيد النص في حال فقدان ملف config
+        t = t.replace("أ", "ا").replace("إ", "ا").replace("آ", "ا").replace("ة", "ه")
+        return t.strip().lower()
+    CITIES_DISTRICTS = {}
+
+# --- إعدادات الحساب والبوت ---
+API_ID = os.environ.get("API_ID", "36360458")
+API_HASH = os.environ.get("API_HASH", "daae4628b4b4aac1f0ebfce23c4fa272")
+SESSION_STRING = os.environ.get("TELETHON_SESSION", "1BJWap1sBuyfIQ9CyhEsZ-f9Xo4W1pr24lihTxGhG_Lrkv25fXoe_HFNLnH0KFqQiXYsMuR_8gzff_3pZLDXF4Q8VUCAQdH_TA_x4z7P8byAP4gTJUc6SNucFy6bznjDHSBnJZht4rrrrwUU9wSeQvsvmP0imFJMFhutiX91CxHYLZVWivexnRXb5h8r_0szwlll1-nbULa7yTc7zx7R2AxcpwRGhGfDCz75HfAKx-YJ9LJZPqU5_dEvyFoC2LssEakTy_gl2tgU9Hy2dLq8HL6Bu-K6GugoAZ6tC83znjckwk_DgWeU9kwOYOms3amFf54JdIf7ML25n9zSkM9WaSR-C_9FD3n4=")
+BOT_USERNAME = "Mishwariibot" 
+# آيدي القروب الخاص بالسائقين (تأكد من كتابته بشكل صحيح، يبدأ بـ -100)
+PRIVATE_DRIVERS_GROUP_ID = -1005136174968 
+
+client = TelegramClient(StringSession(TELETHON_SESSION), API_ID, API_HASH)
+
+DISTRICT_COORDS = {
+
+    "الحرم": (24.4672, 39.6112),
+    "المسجد النبوي": (24.4672, 39.6112),
+    "المنطقة المركزية": (24.4672, 39.6112),
+    "المركزية": (24.4672, 39.6112),
+    "مسجد قباء": (24.4391, 39.6172),
+    "مسجد القبلتين": (24.4845, 39.5772),
+    "الميقات": (24.4132, 39.5445),
+    "ابيار علي": (24.4132, 39.5445),
+    "أبيار علي": (24.4132, 39.5445),
+    "ذو الحليفة": (24.4132, 39.5445),
+    "سيد الشهداء": (24.5028, 39.6133),
+
+
+    "العزيزية": (24.4385, 39.5398),
+    "العوالي": (24.4420, 39.6380),
+    "الخالدية": (24.4550, 39.5850),
+    "الدعيثة": (24.4411, 39.5055),
+    "الرانونا": (24.3980, 39.5820),
+    "شوران": (24.4050, 39.6050),
+    "سلطانة": (24.4880, 39.5810),
+    "القبلتين": (24.4820, 39.5750),
+    "الجرف": (24.5120, 39.5630),
+    "العاقول": (24.4950, 39.7350),
+    "باقدو": (24.4550, 39.6510),
+    "الملك فهد": (24.4850, 39.6550),
+    "الفيحاء": (24.4800, 39.6300),
+    "الاسكان": (24.4350, 39.6500),
+    "الإسكان": (24.4350, 39.6500),
+    "حمراء الأسد": (24.3850, 39.5450),
+    "الزهراء": (24.4750, 39.5950),
+    "الربوة": (24.4950, 39.6150),
+    "العنابس": (24.4710, 39.5910),
+    "السيح": (24.4680, 39.5950),
+    "العنبرية": (24.4590, 39.6000),
+    "الشهداء": (24.5000, 39.6100),
+    "الدويخله": (24.4600, 39.6450),
+    "المبعوث": (24.4750, 39.6600),
+    "الدويمة": (24.4380, 39.5950),
+
+
+    "المطار": (24.5533, 39.7044),
+    "مطار الأمير محمد بن عبدالعزيز": (24.5533, 39.7044),
+    "محطة القطار": (24.4450, 39.6540),
+    "قطار الحرمين": (24.4450, 39.6540),
+    "سابتكو": (24.4610, 39.6020),
+    "النقل الجماعي": (24.4610, 39.6020),
+
+    "جامعة طيبة": (24.4841, 39.5448),
+    "الجامعة الإسلامية": (24.4780, 39.5630),
+    "جامعة الامير مقرن": (24.5050, 39.6600),
+    "الكلية التقنية": (24.4350, 39.5200),
+
+
+    "النور مول": (24.4920, 39.5930),
+    "الراشد مول": (24.4820, 39.5890),
+    "العالية مول": (24.4450, 39.6120),
+    "المنار مول": (24.4650, 39.5650),
+    "مزايا مول": (24.4780, 39.6150),
+    "سوق التمور": (24.4580, 39.6080),
+
+    # --- المستشفيات ---
+    "مستشفى الملك فهد": (24.4700, 39.5750),
+    "مستشفى أحد": (24.5000, 39.6200),
+    "المستشفى العسكري": (24.4300, 39.6400),
+    "مستشفى الحرس": (24.5200, 39.6600),
+    "مستشفى الولادة": (24.4800, 39.6500),
+    "مستشفى الميقات": (24.4150, 39.5500),
+    "المواساة": (24.5050, 39.6000),
+    "الطب الدولي": (24.4550, 39.5900),
+    "مستشفى الدار": (24.4350, 39.6150)
+}
+
+# نقطة افتراضية للمدينة المنورة (مركز المدينة) للكلمات العامة (مثل: عام، فندق، المخطط)
+DEFAULT_MEDINA_COORD = (24.4672, 39.6112)
+# --- محرك الفلترة اليدوي ---
+# قائمة الكلمات السوداء (تمنع السحب)
+EXCLUDE_KEYWORDS = [
+    # كلمات الرسالة التعريفية وإعلانات السائقين
+    "أسرع خدمه", "اطلب مشوارك", "أقرب سائق", "موقعك", "أبدأ مشوارك", "بأسرع وقت",
+    "تذكير تلقائي", "خدمة توصيل المدينة المنورة", "هل تحتاج إلى مشوار سريع",
+    "نحن هنا لخدمتك", "على مدار الساعة", "لطلب كابتن فوراً",   
+    "متواجد", "متاح", "شغال", "جاهز", "أسعارنا", "اسعارنا", "سيارة نظيفة", 
+    "توصيل مشاوير", "أوصل", "اوصل", "بخدمتكم", "أستقبل", "استقبل", "كابتن موثوق",
+ 
+    "العمولة", "العموله", "في ذمة", "ذمة", "تندفع", "مجانا", 
+    "مجاني", "اشتراك بالقروب", "ستثبت", "تثبيت", "تعليمات", 
+    "قوانين", "نظام القروب", "شروط", "نسبة", "نسبه", "٪"    
+    # كلمات التعقيب والخدمات والإقامات
+    "هروب مهني", "بلاغ هروب", "خروج نهائي", "تجديد اقامة", "كرت عمل", 
+    "استخراج تاشيرات", "حجب المخالفات", "تعديل المهنه", "تعديل مهني",
+      "يستثمر", "وفي جواله", "يتوصل معي خاص", "يتواصل معي خاص", 
+    "اعطيه يوزر", "أعطيه يوزر", "علمني الطريقه", "علمني الطريقة"
+    # كلمات الإدارة والقروبات
+    "إدارة القروب", "ادارة القروب", "حرصا منا", "سلامتكم", "انتبه", "مرشحين لكم", 
+    "موثوق لـ", "المرشحين", "قواعد القروب", "قوانين القروب",
+    
+    # كلمات السكليفات (تزوير)
+    "سكليف", "سكليفات", "عذر طبي", "اعذار طبيه", "أعذار طبية", "اجازة مرضية", 
+    "منصة صحتي", "صحتي", "تنزيل اعذار", "مرضي", "مريض",
+        # كلمات التوظيف والبحث عن عمل (جديد)
+    "وظيفة", "وظيفه", "توظيف", "مطلوب موظف"
+    # كلمات النصب المالي والاستثمار
+    "استثمار", "ارباح", "أرباح", "تداول", "عملات رقمية", "دولار", "منصة", 
+    "اربح", "دخل إضافي", "عمل عن بعد", "تحويل مبالغ", "توزيع جوائز",
+      "س̷گ̷ل̷ي̷ف̷َ", "ب̷ص̷ح̷ت̷ي̷", "م̷ع̷ٍت̷م̷د̷ِ", "ت̷ٵ̷ ر̷ي̷خ̷", "ج̷د̷ِي̷د̷ِ", "ق̷د̷ِي̷م̷", "@Seklyf",
+     
+    # كلمات التعقيب والخدمات العامة
+    "معقب", "تعقيب", "استقدام", "تفاويض", "إنجاز", "انجاز", "تسديد مخالفات", 
+    "قروض", "قرض", "تمويل", "بنك", "نقل كفالة", "تعديل مهنة",
+    
+    # الإعلانات العامة والروابط
+    "اعلان", "إعلان", "مساج", "t.me", "http", ".com", "رابط", "قروبنا", "انضموا",
+
+    # --- إضافة جديدة: رسائل الترحيب التلقائية ---
+    "مرحبا بك في قروب", "يا لائام", "🌷"
+    # كلمات الرسائل غير اللائقة والنصب بالبطاقات
+    "خاضعات", "عمات", "عمولتي", "لايك كارد", "بطاقة سوا", "اثباتي بلبايو", "بمقابل", "أوفر لك طلبك",
+  # الصيغ التي طلبتها
+    "يبغا", "تبغا", "يبا", "تبا", "يبغى", "تبغى", "يبي", "تبي",
+    
+    # كلمات محادثات جانبية
+    "يا شباب", "يا عيال", "يا كباتن", "يا كابتن", "وش رايكم", "بكم السعر", 
+    "كم تسوى", "وينكم", "احد يخبر", "بالله", "ارسل لي", "ارسلي", "بدو",
+    "تخبرون", "تنصحون", "من يخبر", "وش افضل", "سؤال", "استفسار", "يا اخوان",
+    
+    # كلمات تدل على نقاشات
+    "كم المشوار", "السعر كم", "تقريبا كم", "سعر المشوار", "ليش", "لماذا",
+    "عطنا", "اعطنا", "خلوها",
+       # كلمات الاحتيال والاستثمار (جديد)
+    "يستثمر", "يربح", "في جواله", "ارباح", "تداول", "عمل من المنزل", 
+    "استثمار", "ربح يومي", "من جوالك", "دخل اضافي",
+
+    # كلمات التوظيف والإدارة
+    "وظيفة", "وظيفه", "توظيف", "شاغرة", "راتب", "سيرة ذاتية", "العمولة", 
+    "العموله", "في ذمة", "مجانا", "اشتراك بالقروب", "٪",
+    # كلمات الاستفسارات والتوظيف
+    "تعرفون", "اللي يعرف", "توظيفة", "يوظفون", "اقدم",
+
+    # كلمات السائقين المتفرغين
+    "فاضي", "متفرغ للمشاوير", "اي مشوار", "تفضل",
+
+    # --- إضافة جديدة: كلمات عامية ومحادثات جانبية ---
+    "بدو", "يبي", "تبي", "تبغى", "ارسلي", "ارسل لي", "يا شباب", "يا عيال", 
+    "وش رايكم", "بكم السعر", "كم تسوى", "وينكم", "احد يخبر", "بالله"
+]
+
+
+# كلمات الطلب (يجب وجود واحدة منها على الأقل)
+# 1. كلمات الطلب (إضافة الصيغ الجديدة التي ذكرتها)
+ORDER_INDICATORS = [
+    # الصيغ السعودية والخليجية الدارجة
+    "ابي", "ابغي", "ابغى", "ابغا", "أبغى", "أبغا", "نبي",
+    "محتاج", "احتاج", "أحتاج", "عوز", "عاوز", "عايز", "أدور", "ادور", 
+    "مطلوب", "بكم", "كم مشوار", "كم توصيل", "ارخص", "أرخص",
+
+    # صيغ السؤال عن توفر الخدمة (Pings)
+    "في احد", "احد يوصل", "من يوصل", "في كابتن", "في سواق", "مين يوديني", 
+    "من يوديني", "مين يوصل", "احد يروح", "احد حول", "في سيارة", "في سياره",
+
+    # صيغ الاستعجال والطلب المباشر
+    "توصيلة", "توصيله", "مشوار", "مشاوير", "درب", "طريق", "طريقي", 
+    "مستعجل", "الان", "الحين", "حالا", "فورا", "ضروري",
+
+    # صيغ العقود والمدارس (النيات طويلة المدى)
+    "ادور كفيل", "ادور سواق", "مطلوب نقل", "اريد", "أريد", "ارغب", "أرغب",
+    "من يقدر", "يقدر يوصل", "متوفر", "متوفر سيارة", "مين عنده"
+]
+
+
+# 2. أنواع الخدمات (إضافة الأغراض والسيارات الكبيرة)
+SERVICE_TYPES = [
+    # مسميات الخدمة العامة
+    "سواق", "سائق", "توصيل", "مشوار", "مشاوير", "يوديني", "يوصلني", "ياخذني",
+    "نقل", "كابتن", "مندوب", "توصيلة", "توصيله", "درب", "طريق", "رد", "ردود",
+
+    # أنواع المنقولات
+    "اغراض", "أغراض", "عفش", "بضاعة", "بضاعه", "طرد", "طلبيه", "طلبية", 
+    "أمانة", "امانه", "ذبيحة", "ذبيحه", "مقاضي", "أكل", "اكل", "اثاث", "أثاث",
+
+    # أنواع السيارات (تفيد في تحديد نوع الطلب)
+    "سيارة", "سياره", "فان", "دباب", "ونيت", "سطحة", "سطحه", "دينا", "باص", 
+    "هايلوكس", "جمس", "صالون", "سيارة كبيرة", "سياره كبيره", "خصوصي", "تاكسي",
+
+    # وجهات وأماكن (تعتبر خدمة بحد ذاتها)
+    "المطار", "الحرم", "القطار", "المحطة", "المحطه", "جامعة", "جامعه", "مدرسة", "مدرسه",
+    "كلية", "كليه", "سوق", "مول", "دوام", "مستشفى", "مستوصف", "عيادة", "عياده",
+
+    # السفر بين المدن
+    "جده", "جدة", "مكة", "مكه", "الرياض", "القصيم", "ينبع", "سفر", "خط"
+]
+
+
+# ---------------------------------------------------------
+# المحرك اليدوي المطور (V2.0)
+# ---------------------------------------------------------
+def analyze_message_manual(text):
+    if not text or len(text) < 5 or len(text) > 500: 
+        return False
+
+    clean_text = normalize_text(text)
+
+    # 1. فحص المستبعدات (الكلمات السوداء)
+    if any(k in clean_text for k in EXCLUDE_KEYWORDS):
+        return False
+
+    # 2. فحص نمط المسار المطور (من ... إلى/الى/الي/لـ)
+    # يدعم: "من بئر عثمان الي حي القبلتين"
+    route_pattern = r"(^|\s)من\s+.*?\s+(إلى|الى|الي|لـ|للمطار|للحرم|للجامعة)(\s|$)"
+    if re.search(route_pattern, clean_text):
+        return True 
+
+    # 3. فحص الجمع بين (كلمة طلب + نوع خدمة)
+    # يدعم: "احتاج" + "توصيل" أو "ابي" + "سيارة"
+    has_order_word = any(word in clean_text for word in ORDER_INDICATORS)
+    has_service_word = any(word in clean_text for word in SERVICE_TYPES)
+
+    if has_order_word and has_service_word:
+        return True
+
+    # 4. فحص كلمات العقود والدوامات
+    contract_words = ["شهري", "عقد", "مدارس", "طالبات", "موظفات", "دوام", "مشاوير"]
+    if any(word in clean_text for word in contract_words) and has_order_word:
+        return True
+
+    return False
+
+# --- معالجة الرسائل ---
+@client.on(events.NewMessage(incoming=True))
+async def handle_new_messages(event):
+    # التأكد من أن الرسالة من مجموعة وليس خاص
+    if not event.is_group: 
+        return
+
+    try:
+        text = event.raw_text
+        if not text: 
+            return
+
+        # فحص مطابقة الرسالة لشروط القنص
+        if analyze_message_manual(text):
+            print(f"🎯 [قنص] طلب مطابق: {text[:40]}...")
+
+            # 1. تحديد الحي (المنطقة)
+            found_d = "عام"
+            text_c = normalize_text(text)
+            for city, districts in CITIES_DISTRICTS.items():
+                for d in districts:
+                    if normalize_text(d) in text_c:
+                        found_d = d
+                        break
+
+            # 2. جلب بيانات المرسل (العميل)
+            sender = await event.get_sender()
+            sender_id = sender.id if sender else 0
+            sender_name = getattr(sender, 'first_name', 'عميل')
+            username = getattr(sender, 'username', None)
+
+            # 3. تجهيز الروابط (يتم إرسالها للبوت الموزع ليختار الأنسب)
+            user_url = f"https://t.me/{username}" if username else "None"
+
+            # تنظيف الآيدي من -100 لإنشاء رابط الرسالة (Message Link)
+            chat_id_clean = str(event.chat_id).replace("-100", "")
+            msg_link = f"https://t.me/c/{chat_id_clean}/{event.id}"
+
+            # 4. صياغة "طرد البيانات" المرسل للبوت الموزع
+            # ملاحظة: نستخدم وسم #ORDER_DATA# ليعرف البوت أن هذه رسالة تحويل طلبات
+            order_payload = (
+                f"#ORDER_DATA#\n"
+                f"DISTRICT:{found_d}\n"
+                f"CUST_NAME:{sender_name}\n"
+                f"CONTENT:{text}\n"
+                f"USERNAME:{user_url}\n"
+                f"MSG_LINK:{msg_link}"
+            )
+
+            # 5. إرسال البيانات للبوت الموزع (الرسمي)
+            # استبدل 'Your_Bot_Username' بمعرف بوتك الموزع (بدون @ أو بها حسب المكتبة)
+            try:
+                # يفضل استخدام المعرف (Username) للبوت هنا
+                await client.send_message('Mishwariibot', order_payload)
+                print(f"✅ تم تحويل الطلب بنجاح للبوت الموزع")
+
+            except Exception as e:
+                print(f"❌ فشل التحويل للبوت الموزع: {e}")
+                # خيار احتياطي: الإرسال للقروب الخاص مباشرة في حال تعطل البوت الموزع
+                try:
+                    await client.send_message(-1005136174968, "⚠️ فشل التحويل للبوت، إرسال احتياطي:\n" + order_payload)
+                except:
+                    pass
+
+    except Exception as e:
+        print(f"⚠️ خطأ عام في الدالة: {e}")
+
+# تأكد أن هذا السطر يبدأ من بداية السطر تماماً (بدون أي مسافات قبله)
+app = Flask(__name__)
+@app.route('/')
+def home(): return "Radar Online", 200
 
 def run_flask():
-    # Render يعطي المنفذ (Port) عبر متغيرات البيئة
-    port = int(os.environ.get("PORT", 8080))
-    server.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=8080)
 
-# --- إعدادات تسجيل الأخطاء ---
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+# --- التشغيل الرئيسي ---
+async def main():
+    print("📡 جاري الاتصال بتليجرام...")
+    await client.start()
 
-# --- مفاتيح الـ API ---
-TELEGRAM_TOKEN = os.environ.get("8550229814:AAG2VkTm_ZBgUSXeQtOMYKFaqwnI95tvGJ4", "ضع_توكن_تلجرام_هنا")
-GEMINI_API_KEY = os.environ.get("AIzaSyA3g-MQeBtMjRA57g6ainK71yJaelG1d_0", "ضع_مفتاح_جوجل_Gemini_هنا")
+    me = await client.get_me()
+    print(f"✅ متصل كـ: {me.first_name}")
 
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash')
+    print("🔄 تحديث قائمة المجموعات...")
+    await client.get_dialogs()
 
-user_context = {}
+    print("🚀 الرادار يعمل الآن في تيرمكس..")
+    await client.run_until_disconnected()
 
-# (دوال start و handle_message و callback_handler تبقى كما هي في الكود السابق)
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("👋 أهلاً بك في البوت الطلابي المجاني!\nأرسل نصاً أو ملف PDF.")
-
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.message.chat_id
-    text_content = ""
-    if update.message.text:
-        text_content = update.message.text
-    elif update.message.document and update.message.document.file_name.endswith('.pdf'):
-        msg = await update.message.reply_text("⏳ جاري قراءة ملف PDF...")
-        file = await context.bot.get_file(update.message.document.file_id)
-        path = f"{chat_id}.pdf"
-        await file.download_to_drive(path)
-        reader = PdfReader(path)
-        for page in reader.pages:
-            text_content += page.extract_text() + "\n"
-        os.remove(path)
-        await msg.delete()
-
-    if text_content:
-        user_context[chat_id] = {"text": text_content[:30000]}
-        keyboard = [[InlineKeyboardButton("📝 تلخيص", callback_data="action_sum")],
-                    [InlineKeyboardButton("❓ اختبار", callback_data="action_quiz")]]
-        await update.message.reply_text("ماذا تريد أن أفعل؟", reply_markup=InlineKeyboardMarkup(keyboard))
-
-async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    chat_id = query.message.chat_id
-    data = query.data
-    await query.answer()
-    
-    if chat_id not in user_context: return
-    content = user_context[chat_id]["text"]
-
-    if data == "action_sum":
-        res = model.generate_content(f"لخص هذا النص بالعربي:\n{content}")
-        await query.message.reply_text(res.text)
-    elif data == "action_quiz":
-        res = model.generate_content(f"اصنع 5 أسئلة من هذا النص:\n{content}")
-        await query.message.reply_text(res.text)
-
-def main():
-    # تشغيل Flask في خيط (Thread) منفصل
-    threading.Thread(target=run_flask).start()
-
-    # تشغيل البوت
-    app = Application.builder().token(TELEGRAM_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_message))
-    app.add_handler(CallbackQueryHandler(callback_handler))
-    
-    print("البوت يعمل وخادم Flask نشط...")
-    app.run_polling()
-
-if __name__ == '__main__':
-    main()
+if __name__ == "__main__":
+    threading.Thread(target=run_flask, daemon=True).start()
+    loop = asyncio.get_event_loop()
+    try:
+        loop.run_until_complete(main())
+    except KeyboardInterrupt:
+        print("🛑 توقف.")
