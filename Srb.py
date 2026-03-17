@@ -25,7 +25,7 @@ except ImportError:
 # --- إعدادات الحساب والبوت ---
 API_ID = os.environ.get("API_ID", "36360458")
 API_HASH = os.environ.get("API_HASH", "daae4628b4b4aac1f0ebfce23c4fa272")
-SESSION_STRING = os.environ.get("TELETHON_SESSION", "1BJWap1sBuyfIQ9CyhEsZ-f9Xo4W1pr24lihTxGhG_Lrkv25fXoe_HFNLnH0KFqQiXYsMuR_8gzff_3pZLDXF4Q8VUCAQdH_TA_x4z7P8byAP4gTJUc6SNucFy6bznjDHSBnJZht4rrrrwUU9wSeQvsvmP0imFJMFhutiX91CxHYLZVWivexnRXb5h8r_0szwlll1-nbULa7yTc7zx7R2AxcpwRGhGfDCz75HfAKx-YJ9LJZPqU5_dEvyFoC2LssEakTy_gl2tgU9Hy2dLq8HL6Bu-K6GugoAZ6tC83znjckwk_DgWeU9kwOYOms3amFf54JdIf7ML25n9zSkM9WaSR-C_9FD3n4=")
+SESSION_STRING = os.environ.get("TELETHON_SESSION", "1BJWap1sBu6dCrAOWpxeEKpBMEl8EjonQ--tV3TPb2GyM-luyZs2rBvunGI865bcxA4hvYtnuyM9xS3AyARz57LvNfAV8e7-cxZ4geapmGKnDviJ86t2Eq7qIWhGsF_uuwqlelN8bzwjNXgruyy0fhYFcf2wq5dn5J9s2bFK2YmYmSmcOaWXCkqFmrlyN1wNmFiJbPUJYEpKlMjbRPP6Zz53HQdRJEc07nYsNwo3KN7yOYkgEtYBItvoBC-BfeB_ngPAbK7ECcih9TUQk_-yr_N40MOZ_0G4iMs5qfrKpXo9FEGdcO3xuk4Es3ZRsWeZkFapczp61sMQ9bfoyg2mpkIwjfgYtD5w=")
 BOT_USERNAME = "Mishwariibot" 
 # آيدي القروب الخاص بالسائقين (تأكد من كتابته بشكل صحيح، يبدأ بـ -100)
 PRIVATE_DRIVERS_GROUP_ID = -1005136174968 
