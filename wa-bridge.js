@@ -255,14 +255,17 @@ app.post('/api/message/send', async (req, res) => {
     if (!sock) return res.status(404).json({ error: "Store session not found" });
 
     try {
-        // 3. الإرسال الفعلي للواتساب
-              // 3. الإرسال باستخدام الرقم النظيف (cleanPhone)
+// 3. الإرسال الفعلي للواتساب
         await sock.sendMessage(`${cleanPhone}@s.whatsapp.net`, { text: text });
         console.log(`✅ [SUCCESS] تم إرسال الرسالة للمتجر ${storeId} إلى ${cleanPhone}`);
         res.json({ status: "success" });
+
     } catch (error) {
         console.error(`❌ [ERROR] فشل الإرسال للواتساب: ${error.message}`);
         res.status(500).json({ error: error.message });
+    } // <--- كان ناقصاً (إغلاق الـ catch)
+}); // <--- كان ناقصاً (إغلاق الـ app.post)
+
 // التحقق من صحة السيرفر
 app.get('/health', (req, res) => {
     res.json({ 
