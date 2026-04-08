@@ -232,30 +232,32 @@ app.post('/api/session/start', async (req, res) => {
 
 // إرسال رسالة
 app.post('/api/message/send', async (req, res) => {
-    // 1. استخراج البيانات القادمة من البايثون
-    const { storeId, phone, text } = req.body;
-    console.log(`📩 طلب إرسال خارجي للمتجر ${storeId} -> ${phone}`);
-
-    // 2. التحقق هل الجلسة مفتوحة في الذاكرة؟
-    let sock = activeSessions[storeId];
-
-    if (!sock) {
-        console.log(`🔄 الجلسة خاملة، محاولة إعادة التنشيط للمتجر ${storeId}...`);
-        try {
-            // محاولة إعادة تنشيط الجلسة من الداتابيز قبل الفشل
-            await initWhatsApp(storeId);
-            // انتظر 3 ثوانٍ للتأكد من فتح المقبس
-            await new Promise(r => setTimeout(r, 3000));
-            sock = activeSessions[storeId];
-        } catch (err) {
-            return res.status(500).json({ error: "Session failed to reactivate" });
-        }
-    }
-
-    if (!sock) return res.status(404).json({ error: "Store session not found" });
-
     try {
-// 3. الإرسال الفعلي للواتساب
+        // 1. استخراج البيانات القادمة من البايثون
+        const { storeId, phone, text } = req.body;
+        console.log(`📩 طلب إرسال خارجي للمتجر ${storeId} -> ${phone}`);
+
+        // --- السطر المفقود الذي تسبب في الخطأ (تعريف cleanPhone) ---
+        const cleanPhone = String(phone).split('@')[0].split(':')[0].replace(/\D/g, '');
+        // -------------------------------------------------------
+
+        // 2. التحقق هل الجلسة مفتوحة في الذاكرة؟
+        let sock = activeSessions[storeId];
+
+        if (!sock) {
+            console.log(`🔄 الجلسة خاملة، محاولة إعادة التنشيط للمتجر ${storeId}...`);
+            try {
+                await initWhatsApp(storeId);
+                await new Promise(r => setTimeout(r, 3000));
+                sock = activeSessions[storeId];
+            } catch (err) {
+                return res.status(500).json({ error: "Session failed to reactivate" });
+            }
+        }
+
+        if (!sock) return res.status(404).json({ error: "Store session not found" });
+
+        // 3. الإرسال باستخدام cleanPhone الذي عرفناه بالأعلى
         await sock.sendMessage(`${cleanPhone}@s.whatsapp.net`, { text: text });
         console.log(`✅ [SUCCESS] تم إرسال الرسالة للمتجر ${storeId} إلى ${cleanPhone}`);
         res.json({ status: "success" });
@@ -263,8 +265,8 @@ app.post('/api/message/send', async (req, res) => {
     } catch (error) {
         console.error(`❌ [ERROR] فشل الإرسال للواتساب: ${error.message}`);
         res.status(500).json({ error: error.message });
-    } // <--- كان ناقصاً (إغلاق الـ catch)
-}); // <--- كان ناقصاً (إغلاق الـ app.post)
+    }
+});
 
 // التحقق من صحة السيرفر
 app.get('/health', (req, res) => {
