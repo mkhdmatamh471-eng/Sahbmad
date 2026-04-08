@@ -1,4 +1,4 @@
-const express = require('express');
+Const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const { 
@@ -216,7 +216,7 @@ app.post('/api/session/start', async (req, res) => {
 // إرسال رسالة
 app.post('/api/message/send', async (req, res) => {
     const { storeId, phone, text } = req.body;
-    
+
     // إذا لم يكن المتجر متصلاً في الذاكرة، حاول تشغيله أولاً
     if (!activeSessions[storeId]) {
         try {
@@ -251,4 +251,9 @@ app.get('/health', (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`🚀 Node.js WhatsApp Bridge is running on port ${PORT}`);
+});
+
+// أضف هذا في ملف wa-bridge.js
+app.get('/', (req, res) => {
+    res.send("Jaddahh WhatsApp Bridge is Live!");
 });
