@@ -183,14 +183,13 @@ function initWhatsApp(storeId, phoneNumber = null) {
                         // استخراج الرقم وتطهيره من المعرفات الإضافية (مثل :1 أو @g.us)
                         const remoteJid = msg.key.remoteJid;
                         let sender = remoteJid.split("@")[0];
-                        
                         // إذا كان الرقم يحتوي على ":" (نظام الأجهزة المتعددة)، نأخذ الجزء الأول فقط
                         if (sender.includes(':')) {
                             sender = sender.split(':')[0];
                         }
 
                         const text = msg.message.conversation || msg.message.extendedTextMessage?.text;
-                        
+
                         if (text) {
                             console.log(`[INCOMING] ${storeId} <- ${sender}: ${text}`);
                             try {
@@ -257,15 +256,13 @@ app.post('/api/message/send', async (req, res) => {
 
     try {
         // 3. الإرسال الفعلي للواتساب
-        await sock.sendMessage(`${phone}@s.whatsapp.net`, { text: text });
-        console.log(`✅ [SUCCESS] تم إرسال الرسالة للمتجر ${storeId}`);
+              // 3. الإرسال باستخدام الرقم النظيف (cleanPhone)
+        await sock.sendMessage(`${cleanPhone}@s.whatsapp.net`, { text: text });
+        console.log(`✅ [SUCCESS] تم إرسال الرسالة للمتجر ${storeId} إلى ${cleanPhone}`);
         res.json({ status: "success" });
     } catch (error) {
         console.error(`❌ [ERROR] فشل الإرسال للواتساب: ${error.message}`);
         res.status(500).json({ error: error.message });
-    }
-});
-
 // التحقق من صحة السيرفر
 app.get('/health', (req, res) => {
     res.json({ 
