@@ -120,10 +120,12 @@ function initWhatsApp(storeId, phoneNumber = null) {
                 version,
                 auth: state,
                 logger: pino({ level: "silent" }),
-                browser: ["Jaddahh Dev", "Chrome", "1.1.0"],
+                browser: ["Ubuntu", "Chrome", "20.0.04"], 
                 printQRInTerminal: false,
                 syncFullHistory: false,
+                defaultQueryTimeoutMs: undefined, 
                 connectTimeoutMs: 60000,
+                keepAliveIntervalMs: 10000,
             });
 
             activeSessions[storeId] = sock;
