@@ -131,6 +131,7 @@ function initWhatsApp(storeId, phoneNumber = null) {
             activeSessions[storeId] = sock;
 
             // طلب كود الربط إذا تم تمرير رقم هاتف
+                        // طلب كود الربط إذا تم تمرير رقم هاتف
             if (!sock.authState.creds.registered && phoneNumber) {
                 console.log(`[PAIRING] 🔑 طلب كود للرقم: ${phoneNumber}`);
                 setTimeout(async () => {
@@ -145,7 +146,7 @@ function initWhatsApp(storeId, phoneNumber = null) {
 
             sock.ev.on("creds.update", saveCreds);
 
-            sock.ev.on("connection.update", (update) => {
+            sock.ev.on("connection.update", async (update) => {
                 const { connection, lastDisconnect, qr } = update;
 
                 if (qr && !phoneNumber) {
@@ -155,12 +156,17 @@ function initWhatsApp(storeId, phoneNumber = null) {
                 if (connection === "close") {
                     delete activeSessions[storeId];
                     const statusCode = (lastDisconnect?.error instanceof Boom)?.output?.statusCode;
-                    if (statusCode === 401) {
+                    
+                    console.log(`[CLOSED] المتجر ${storeId} انقطع الاتصال. الكود: ${statusCode}`);
+
+                    // مسح الجلسة إذا كانت تالفة أو غير مصرح بها (401, 403, 428) لمنع التكرار اللانهائي
+                    if (statusCode === 401 || statusCode === 403 || statusCode === 428) {
                         console.log(`[LOGOUT] 🗑️ مسح الجلسة التالفة للمتجر ${storeId}`);
-                        pool.query("DELETE FROM whatsapp_sessions WHERE id LIKE $1", [`${storeId}_%`]);
+                        await pool.query("DELETE FROM whatsapp_sessions WHERE id LIKE $1", [`${storeId}_%`]);
                     } else if (statusCode !== DisconnectReason.loggedOut) {
-                        console.log(`[RECONNECT] 🔄 إعادة المحاولة للمتجر ${storeId}`);
-                        setTimeout(() => initWhatsApp(storeId), 5000);
+                        // إعادة المحاولة فقط في حالات أخطاء الشبكة المؤقتة وبفاصل زمني أطول (10 ثوانٍ)
+                        console.log(`[RECONNECT] 🔄 إعادة المحاولة للمتجر ${storeId} بعد 10 ثوانٍ...`);
+                        setTimeout(() => initWhatsApp(storeId), 10000);
                     }
                 } else if (connection === "open") {
                     console.log(`[WA_READY] 🎉 SESSION_OPENED: ${storeId}`);
@@ -217,27 +223,35 @@ app.post('/api/session/start', async (req, res) => {
 
 // إرسال رسالة
 app.post('/api/message/send', async (req, res) => {
+    // 1. استخراج البيانات القادمة من البايثون
     const { storeId, phone, text } = req.body;
+    console.log(`📩 طلب إرسال خارجي للمتجر ${storeId} -> ${phone}`);
 
-    // إذا لم يكن المتجر متصلاً في الذاكرة، حاول تشغيله أولاً
-    if (!activeSessions[storeId]) {
+    // 2. التحقق هل الجلسة مفتوحة في الذاكرة؟
+    let sock = activeSessions[storeId];
+
+    if (!sock) {
+        console.log(`🔄 الجلسة خاملة، محاولة إعادة التنشيط للمتجر ${storeId}...`);
         try {
+            // محاولة إعادة تنشيط الجلسة من الداتابيز قبل الفشل
             await initWhatsApp(storeId);
-            // انتظار بسيط للتأكد من اكتمال الاتصال
+            // انتظر 3 ثوانٍ للتأكد من فتح المقبس
             await new Promise(r => setTimeout(r, 3000));
-        } catch (e) {
-            return res.status(500).json({ error: "Failed to initialize session" });
+            sock = activeSessions[storeId];
+        } catch (err) {
+            return res.status(500).json({ error: "Session failed to reactivate" });
         }
     }
 
-    const sock = activeSessions[storeId];
-    if (!sock) return res.status(404).json({ error: "Store not connected" });
+    if (!sock) return res.status(404).json({ error: "Store session not found" });
 
     try {
+        // 3. الإرسال الفعلي للواتساب
         await sock.sendMessage(`${phone}@s.whatsapp.net`, { text: text });
-        console.log(`[SENT] ${storeId} -> ${phone}`);
+        console.log(`✅ [SUCCESS] تم إرسال الرسالة للمتجر ${storeId}`);
         res.json({ status: "success" });
     } catch (error) {
+        console.error(`❌ [ERROR] فشل الإرسال للواتساب: ${error.message}`);
         res.status(500).json({ error: error.message });
     }
 });
