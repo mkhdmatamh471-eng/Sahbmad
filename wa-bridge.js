@@ -156,7 +156,7 @@ function initWhatsApp(storeId, phoneNumber = null) {
                 if (connection === "close") {
                     delete activeSessions[storeId];
                     const statusCode = (lastDisconnect?.error instanceof Boom)?.output?.statusCode;
-                    
+
                     console.log(`[CLOSED] المتجر ${storeId} انقطع الاتصال. الكود: ${statusCode}`);
 
                     // مسح الجلسة إذا كانت تالفة أو غير مصرح بها (401, 403, 428) لمنع التكرار اللانهائي
@@ -175,12 +175,22 @@ function initWhatsApp(storeId, phoneNumber = null) {
             });
 
             // إرسال الرسائل الواردة إلى سيرفر البايثون (Webhook)
+                        // إرسال الرسائل الواردة إلى سيرفر البايثون (Webhook)
             sock.ev.on("messages.upsert", async (m) => {
                 if (m.type !== "notify") return;
                 for (const msg of m.messages) {
                     if (!msg.key.fromMe && msg.message) {
-                        const sender = msg.key.remoteJid.split("@")[0];
+                        // استخراج الرقم وتطهيره من المعرفات الإضافية (مثل :1 أو @g.us)
+                        const remoteJid = msg.key.remoteJid;
+                        let sender = remoteJid.split("@")[0];
+                        
+                        // إذا كان الرقم يحتوي على ":" (نظام الأجهزة المتعددة)، نأخذ الجزء الأول فقط
+                        if (sender.includes(':')) {
+                            sender = sender.split(':')[0];
+                        }
+
                         const text = msg.message.conversation || msg.message.extendedTextMessage?.text;
+                        
                         if (text) {
                             console.log(`[INCOMING] ${storeId} <- ${sender}: ${text}`);
                             try {
