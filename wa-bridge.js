@@ -105,11 +105,21 @@ async function usePostgresAuthState(sessionId) {
 
 /**
  * 3. المحرك الرئيسي (تأسيس الاتصال)
+ * تم التعديل لضمان إمكانية إعادة طلب كود الربط عند انتهاء صلاحيته
  */
 function initWhatsApp(storeId, phoneNumber = null) {
     return new Promise(async (resolve, reject) => {
+        // إذا كانت الجلسة موجودة مسبقاً، نقوم بإنهاء القديمة إذا كان هناك طلب كود جديد
         if (activeSessions[storeId]) {
-            return resolve({ status: "ALREADY_CONNECTED" });
+            if (phoneNumber) {
+                console.log(`[CLEANUP] 🔄 إنهاء الجلسة القديمة للمتجر ${storeId} لطلب كود جديد...`);
+                try {
+                    activeSessions[storeId].end();
+                } catch (e) {}
+                delete activeSessions[storeId];
+            } else {
+                return resolve({ status: "ALREADY_CONNECTED" });
+            }
         }
 
         try {
@@ -121,10 +131,10 @@ function initWhatsApp(storeId, phoneNumber = null) {
                 version,
                 auth: state,
                 logger: pino({ level: "silent" }),
-                browser: ["Ubuntu", "Chrome", "20.0.04"], 
+                browser: ["Ubuntu", "Chrome", "20.0.04"],
                 printQRInTerminal: false,
                 syncFullHistory: false,
-                defaultQueryTimeoutMs: undefined, 
+                defaultQueryTimeoutMs: undefined,
                 connectTimeoutMs: 60000,
                 keepAliveIntervalMs: 10000,
             });
@@ -133,15 +143,22 @@ function initWhatsApp(storeId, phoneNumber = null) {
 
             // طلب كود الربط إذا تم تمرير رقم هاتف
             if (!sock.authState.creds.registered && phoneNumber) {
-                console.log(`[PAIRING] 🔑 طلب كود للرقم: ${phoneNumber}`);
+                console.log(`[PAIRING] 🔑 جاري طلب كود ربط للرقم: ${phoneNumber}`);
+                
+                // زيادة وقت الانتظار إلى 5 ثوانٍ لضمان جاهزية المقبس تماماً
                 setTimeout(async () => {
                     try {
-                        const code = await sock.requestPairingCode(phoneNumber.replace(/\D/g, ''));
+                        const cleanNumber = phoneNumber.replace(/\D/g, '');
+                        const code = await sock.requestPairingCode(cleanNumber);
                         resolve({ status: "pairing_code", code: code });
                     } catch (err) {
-                        reject(err);
+                        console.error(`[PAIRING_ERR] ❌ فشل توليد الكود للمتجر ${storeId}:`, err.message);
+                        
+                        // في حال الفشل، نمسح الجلسة فوراً لنسمح بإعادة المحاولة
+                        delete activeSessions[storeId];
+                        reject(new Error("FAILED_TO_GENERATE_PAIRING_CODE"));
                     }
-                }, 4000); 
+                }, 5000);
             }
 
             sock.ev.on("creds.update", saveCreds);
@@ -149,6 +166,7 @@ function initWhatsApp(storeId, phoneNumber = null) {
             sock.ev.on("connection.update", async (update) => {
                 const { connection, lastDisconnect, qr } = update;
 
+                // إرسال QR Code إذا لم يتم استخدام نظام رقم الهاتف
                 if (qr && !phoneNumber) {
                     resolve({ status: "qr_code", qr: qr });
                 }
@@ -157,14 +175,17 @@ function initWhatsApp(storeId, phoneNumber = null) {
                     const statusCode = (lastDisconnect?.error instanceof Boom)?.output?.statusCode;
                     console.log(`[CLOSED] المتجر ${storeId} انقطع الاتصال. الكود: ${statusCode || 'Unknown'}`);
 
-                    const isLoggedOut = statusCode === DisconnectReason.loggedOut || statusCode === 401 || statusCode === 403 || statusCode === 428;
+                    const isLoggedOut = statusCode === DisconnectReason.loggedOut || 
+                                      statusCode === 401 || 
+                                      statusCode === 403 || 
+                                      statusCode === 428;
 
-                    // تتبع المحاولات الفاشلة لمنع الحلقة المفرغة
                     if (!retryCount[storeId]) retryCount[storeId] = 0;
                     retryCount[storeId]++;
 
+                    // إذا كانت الجلسة تالفة أو تجاوزت محاولات الإعادة، نمسح البيانات نهائياً
                     if (isLoggedOut || retryCount[storeId] > 3) {
-                        console.log(`[CLEANUP] 🗑️ الجلسة تالفة للمتجر ${storeId}. جاري الحذف لتجنب الحلقة المفرغة...`);
+                        console.log(`[CLEANUP] 🗑️ مسح بيانات الجلسة للمتجر ${storeId} (تكرار فشل أو خروج)...`);
                         delete activeSessions[storeId];
                         delete retryCount[storeId];
                         await pool.query("DELETE FROM whatsapp_sessions WHERE id LIKE $1", [`${storeId}_%`]);
@@ -179,6 +200,8 @@ function initWhatsApp(storeId, phoneNumber = null) {
                     resolve({ status: "connected" });
                 }
             });
+
+
 
             // إرسال الرسائل الواردة إلى سيرفر البايثون (Webhook)
             sock.ev.on("messages.upsert", async (m) => {
