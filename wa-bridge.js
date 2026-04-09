@@ -21,16 +21,18 @@ app.use(express.json());
 // عنوان سيرفر البايثون (يجب إضافته في إعدادات Render)
 const PYTHON_BACKEND_URL = process.env.PYTHON_BACKEND_URL || "https://your-python-app.onrender.com";
 
-// تخزين الجلسات النشطة في الذاكرة لتجنب فتح المتصفح عدة مرات
+// تخزين الجلسات النشطة في الذاكرة
 const activeSessions = {};
+// تخزين عدد محاولات إعادة الاتصال لتجنب الحلقة المفرغة (Infinite Loop)
+const retryCount = {};
 
 /**
- * 1. إعداد الـ Pool (اتصال مستدام)
+ * 1. إعداد الـ Pool (اتصال مستدام بقاعدة البيانات)
  */
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false },
-    max: 5, // تم زيادة العدد قليلاً لدعم الطلبات المتزامنة
+    max: 5,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 5000,
 });
@@ -103,7 +105,6 @@ async function usePostgresAuthState(sessionId) {
 
 /**
  * 3. المحرك الرئيسي (تأسيس الاتصال)
- * تم تغليفه في Promise ليتمكن الـ API من انتظار النتيجة (QR أو كود أو نجاح)
  */
 function initWhatsApp(storeId, phoneNumber = null) {
     return new Promise(async (resolve, reject) => {
@@ -131,7 +132,6 @@ function initWhatsApp(storeId, phoneNumber = null) {
             activeSessions[storeId] = sock;
 
             // طلب كود الربط إذا تم تمرير رقم هاتف
-                        // طلب كود الربط إذا تم تمرير رقم هاتف
             if (!sock.authState.creds.registered && phoneNumber) {
                 console.log(`[PAIRING] 🔑 طلب كود للرقم: ${phoneNumber}`);
                 setTimeout(async () => {
@@ -154,39 +154,39 @@ function initWhatsApp(storeId, phoneNumber = null) {
                 }
 
                 if (connection === "close") {
-                    delete activeSessions[storeId];
                     const statusCode = (lastDisconnect?.error instanceof Boom)?.output?.statusCode;
+                    console.log(`[CLOSED] المتجر ${storeId} انقطع الاتصال. الكود: ${statusCode || 'Unknown'}`);
 
-                    console.log(`[CLOSED] المتجر ${storeId} انقطع الاتصال. الكود: ${statusCode}`);
+                    const isLoggedOut = statusCode === DisconnectReason.loggedOut || statusCode === 401 || statusCode === 403 || statusCode === 428;
 
-                    // مسح الجلسة إذا كانت تالفة أو غير مصرح بها (401, 403, 428) لمنع التكرار اللانهائي
-                    if (statusCode === 401 || statusCode === 403 || statusCode === 428) {
-                        console.log(`[LOGOUT] 🗑️ مسح الجلسة التالفة للمتجر ${storeId}`);
+                    // تتبع المحاولات الفاشلة لمنع الحلقة المفرغة
+                    if (!retryCount[storeId]) retryCount[storeId] = 0;
+                    retryCount[storeId]++;
+
+                    if (isLoggedOut || retryCount[storeId] > 3) {
+                        console.log(`[CLEANUP] 🗑️ الجلسة تالفة للمتجر ${storeId}. جاري الحذف لتجنب الحلقة المفرغة...`);
+                        delete activeSessions[storeId];
+                        delete retryCount[storeId];
                         await pool.query("DELETE FROM whatsapp_sessions WHERE id LIKE $1", [`${storeId}_%`]);
-                    } else if (statusCode !== DisconnectReason.loggedOut) {
-                        // إعادة المحاولة فقط في حالات أخطاء الشبكة المؤقتة وبفاصل زمني أطول (10 ثوانٍ)
-                        console.log(`[RECONNECT] 🔄 إعادة المحاولة للمتجر ${storeId} بعد 10 ثوانٍ...`);
-                        setTimeout(() => initWhatsApp(storeId), 10000);
+                        reject(new Error("SESSION_TERMINATED"));
+                    } else {
+                        console.log(`[RECONNECT] 🔄 محاولة ${retryCount[storeId]} لإعادة الاتصال للمتجر ${storeId} بعد 10 ثوانٍ...`);
+                        setTimeout(() => initWhatsApp(storeId, phoneNumber).catch(() => {}), 10000);
                     }
                 } else if (connection === "open") {
-                    console.log(`[WA_READY] 🎉 SESSION_OPENED: ${storeId}`);
+                    console.log(`[WA_READY] 🎉 متصل بنجاح: ${storeId}`);
+                    retryCount[storeId] = 0; // تصفير العداد عند النجاح
                     resolve({ status: "connected" });
                 }
             });
 
             // إرسال الرسائل الواردة إلى سيرفر البايثون (Webhook)
-                        // إرسال الرسائل الواردة إلى سيرفر البايثون (Webhook)
             sock.ev.on("messages.upsert", async (m) => {
                 if (m.type !== "notify") return;
                 for (const msg of m.messages) {
                     if (!msg.key.fromMe && msg.message) {
-                        // استخراج الرقم وتطهيره من المعرفات الإضافية (مثل :1 أو @g.us)
                         const remoteJid = msg.key.remoteJid;
-                        let sender = remoteJid.split("@")[0];
-                        // إذا كان الرقم يحتوي على ":" (نظام الأجهزة المتعددة)، نأخذ الجزء الأول فقط
-                        if (sender.includes(':')) {
-                            sender = sender.split(':')[0];
-                        }
+                        let sender = remoteJid.split("@")[0].split(":")[0].replace(/\D/g, ''); // تنظيف فوري للرقم
 
                         const text = msg.message.conversation || msg.message.extendedTextMessage?.text;
 
@@ -195,7 +195,8 @@ function initWhatsApp(storeId, phoneNumber = null) {
                             try {
                                 await axios.post(`${PYTHON_BACKEND_URL}/webhook/node-incoming`, {
                                     storeId: storeId,
-                                    phone: sender,
+                                    customerPhone: sender, // استخدام الحقل الموحد مع بايثون
+                                    phone: sender, // كاحتياط
                                     message: text
                                 });
                             } catch (err) {
@@ -233,34 +234,36 @@ app.post('/api/session/start', async (req, res) => {
 // إرسال رسالة
 app.post('/api/message/send', async (req, res) => {
     try {
-        // 1. استخراج البيانات القادمة من البايثون
-        const { storeId, phone, text } = req.body;
-        console.log(`📩 طلب إرسال خارجي للمتجر ${storeId} -> ${phone}`);
+        // استقبال customerPhone (وترك phone كاحتياط)
+        const { storeId, customerPhone, phone, text } = req.body;
+        const targetPhone = customerPhone || phone;
+        
+        console.log(`📩 طلب إرسال للمتجر ${storeId} -> ${targetPhone}`);
 
-        // --- السطر المفقود الذي تسبب في الخطأ (تعريف cleanPhone) ---
-        const cleanPhone = String(phone).split('@')[0].split(':')[0].replace(/\D/g, '');
-        // -------------------------------------------------------
+        if (!storeId || !targetPhone || !text) {
+            return res.status(400).json({ error: "Missing parameters" });
+        }
 
-        // 2. التحقق هل الجلسة مفتوحة في الذاكرة؟
+        // تنظيف الرقم تحسباً لأي زوائد
+        const cleanPhone = String(targetPhone).split('@')[0].split(':')[0].replace(/\D/g, '');
+
         let sock = activeSessions[storeId];
 
         if (!sock) {
             console.log(`🔄 الجلسة خاملة، محاولة إعادة التنشيط للمتجر ${storeId}...`);
-            try {
-                await initWhatsApp(storeId);
-                await new Promise(r => setTimeout(r, 3000));
-                sock = activeSessions[storeId];
-            } catch (err) {
-                return res.status(500).json({ error: "Session failed to reactivate" });
-            }
+            await initWhatsApp(storeId);
+            await new Promise(r => setTimeout(r, 3000));
+            sock = activeSessions[storeId];
         }
 
-        if (!sock) return res.status(404).json({ error: "Store session not found" });
+        if (!sock) {
+            return res.status(404).json({ error: "Store session not found" });
+        }
 
-        // 3. الإرسال باستخدام cleanPhone الذي عرفناه بالأعلى
+        // الإرسال الفعلي
         await sock.sendMessage(`${cleanPhone}@s.whatsapp.net`, { text: text });
         console.log(`✅ [SUCCESS] تم إرسال الرسالة للمتجر ${storeId} إلى ${cleanPhone}`);
-        res.json({ status: "success" });
+        res.json({ status: "success", sentTo: cleanPhone });
 
     } catch (error) {
         console.error(`❌ [ERROR] فشل الإرسال للواتساب: ${error.message}`);
@@ -276,12 +279,11 @@ app.get('/health', (req, res) => {
     });
 });
 
+app.get('/', (req, res) => {
+    res.send("Jaddahh WhatsApp Bridge is Live!");
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`🚀 Node.js WhatsApp Bridge is running on port ${PORT}`);
-});
-
-// أضف هذا في ملف wa-bridge.js
-app.get('/', (req, res) => {
-    res.send("Jaddahh WhatsApp Bridge is Live!");
 });
