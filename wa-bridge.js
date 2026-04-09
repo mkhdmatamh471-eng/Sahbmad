@@ -18,17 +18,10 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// عنوان سيرفر البايثون (يجب إضافته في إعدادات Render)
 const PYTHON_BACKEND_URL = process.env.PYTHON_BACKEND_URL || "https://your-python-app.onrender.com";
-
-// تخزين الجلسات النشطة في الذاكرة
 const activeSessions = {};
-// تخزين عدد محاولات إعادة الاتصال لتجنب الحلقة المفرغة (Infinite Loop)
 const retryCount = {};
 
-/**
- * 1. إعداد الـ Pool (اتصال مستدام بقاعدة البيانات)
- */
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false },
@@ -37,10 +30,8 @@ const pool = new Pool({
     connectionTimeoutMillis: 5000,
 });
 
-let isDbConnected = false;
-
 /**
- * 2. دالة إدارة الجلسة من PostgreSQL
+ * دالة إدارة الجلسة من PostgreSQL
  */
 async function usePostgresAuthState(sessionId) {
     const writeData = async (data, id) => {
@@ -58,14 +49,8 @@ async function usePostgresAuthState(sessionId) {
     const readData = async (id) => {
         try {
             const res = await pool.query("SELECT data FROM whatsapp_sessions WHERE id = $1", [`${sessionId}_${id}`]);
-            if (!isDbConnected) {
-                console.log(`[DB] ✅ متصل بـ PostgreSQL.`);
-                isDbConnected = true;
-            }
             return res.rows.length > 0 ? JSON.parse(JSON.stringify(res.rows[0].data), BufferJSON.reviver) : null;
-        } catch (err) {
-            return null;
-        }
+        } catch (err) { return null; }
     };
 
     const removeData = async (id) => {
@@ -104,18 +89,14 @@ async function usePostgresAuthState(sessionId) {
 }
 
 /**
- * 3. المحرك الرئيسي (تأسيس الاتصال)
- * تم التعديل لضمان إمكانية إعادة طلب كود الربط عند انتهاء صلاحيته
+ * المحرك الرئيسي (تأسيس الاتصال)
  */
 function initWhatsApp(storeId, phoneNumber = null) {
     return new Promise(async (resolve, reject) => {
-        // إذا كانت الجلسة موجودة مسبقاً، نقوم بإنهاء القديمة إذا كان هناك طلب كود جديد
         if (activeSessions[storeId]) {
             if (phoneNumber) {
                 console.log(`[CLEANUP] 🔄 إنهاء الجلسة القديمة للمتجر ${storeId} لطلب كود جديد...`);
-                try {
-                    activeSessions[storeId].end();
-                } catch (e) {}
+                try { activeSessions[storeId].end(); } catch (e) {}
                 delete activeSessions[storeId];
             } else {
                 return resolve({ status: "ALREADY_CONNECTED" });
@@ -134,27 +115,20 @@ function initWhatsApp(storeId, phoneNumber = null) {
                 browser: ["Ubuntu", "Chrome", "20.0.04"],
                 printQRInTerminal: false,
                 syncFullHistory: false,
-                defaultQueryTimeoutMs: undefined,
                 connectTimeoutMs: 60000,
-                keepAliveIntervalMs: 10000,
             });
 
             activeSessions[storeId] = sock;
 
-            // طلب كود الربط إذا تم تمرير رقم هاتف
+            // طلب كود الربط
             if (!sock.authState.creds.registered && phoneNumber) {
                 console.log(`[PAIRING] 🔑 جاري طلب كود ربط للرقم: ${phoneNumber}`);
-                
-                // زيادة وقت الانتظار إلى 5 ثوانٍ لضمان جاهزية المقبس تماماً
                 setTimeout(async () => {
                     try {
                         const cleanNumber = phoneNumber.replace(/\D/g, '');
                         const code = await sock.requestPairingCode(cleanNumber);
                         resolve({ status: "pairing_code", code: code });
                     } catch (err) {
-                        console.error(`[PAIRING_ERR] ❌ فشل توليد الكود للمتجر ${storeId}:`, err.message);
-                        
-                        // في حال الفشل، نمسح الجلسة فوراً لنسمح بإعادة المحاولة
                         delete activeSessions[storeId];
                         reject(new Error("FAILED_TO_GENERATE_PAIRING_CODE"));
                     }
@@ -166,51 +140,57 @@ function initWhatsApp(storeId, phoneNumber = null) {
             sock.ev.on("connection.update", async (update) => {
                 const { connection, lastDisconnect, qr } = update;
 
-                // إرسال QR Code إذا لم يتم استخدام نظام رقم الهاتف
                 if (qr && !phoneNumber) {
                     resolve({ status: "qr_code", qr: qr });
                 }
 
                 if (connection === "close") {
                     const statusCode = (lastDisconnect?.error instanceof Boom)?.output?.statusCode;
-                    console.log(`[CLOSED] المتجر ${storeId} انقطع الاتصال. الكود: ${statusCode || 'Unknown'}`);
-
-                    const isLoggedOut = statusCode === DisconnectReason.loggedOut || 
-                                      statusCode === 401 || 
-                                      statusCode === 403 || 
-                                      statusCode === 428;
+                    const isLoggedOut = statusCode === DisconnectReason.loggedOut || statusCode === 401;
 
                     if (!retryCount[storeId]) retryCount[storeId] = 0;
                     retryCount[storeId]++;
 
-                    // إذا كانت الجلسة تالفة أو تجاوزت محاولات الإعادة، نمسح البيانات نهائياً
                     if (isLoggedOut || retryCount[storeId] > 3) {
-                        console.log(`[CLEANUP] 🗑️ مسح بيانات الجلسة للمتجر ${storeId} (تكرار فشل أو خروج)...`);
                         delete activeSessions[storeId];
-                        delete retryCount[storeId];
                         await pool.query("DELETE FROM whatsapp_sessions WHERE id LIKE $1", [`${storeId}_%`]);
                         reject(new Error("SESSION_TERMINATED"));
                     } else {
-                        console.log(`[RECONNECT] 🔄 محاولة ${retryCount[storeId]} لإعادة الاتصال للمتجر ${storeId} بعد 10 ثوانٍ...`);
                         setTimeout(() => initWhatsApp(storeId, phoneNumber).catch(() => {}), 10000);
                     }
-                } else if (connection === "open") {
+                } 
+                
+                else if (connection === "open") {
                     console.log(`[WA_READY] 🎉 متصل بنجاح: ${storeId}`);
-                    retryCount[storeId] = 0; // تصفير العداد عند النجاح
+                    
+                    // --- تحديث: حفظ الربط بين LID والرقم الحقيقي ---
+                    if (phoneNumber) {
+                        try {
+                            const myLid = sock.user.id.split(':')[0].split('@')[0];
+                            const myRealPhone = phoneNumber.replace(/\D/g, '');
+                            
+                            console.log(`[MAPPING] 🔗 حفظ الربط: ${myRealPhone} <-> ${myLid}`);
+                            await pool.query(
+                                "INSERT INTO phone_mappings (store_id, lid, real_phone) VALUES ($1, $2, $3) ON CONFLICT (lid) DO UPDATE SET real_phone = $3",
+                                [storeId, myLid, myRealPhone]
+                            );
+                        } catch (err) {
+                            console.error(`[MAPPING_ERR] ❌ فشل حفظ الربط: ${err.message}`);
+                        }
+                    }
+                    
+                    retryCount[storeId] = 0;
                     resolve({ status: "connected" });
                 }
             });
 
-
-
-            // إرسال الرسائل الواردة إلى سيرفر البايثون (Webhook)
+            // استقبال الرسائل
             sock.ev.on("messages.upsert", async (m) => {
                 if (m.type !== "notify") return;
                 for (const msg of m.messages) {
                     if (!msg.key.fromMe && msg.message) {
                         const remoteJid = msg.key.remoteJid;
-                        let sender = remoteJid.split("@")[0].split(":")[0].replace(/\D/g, ''); // تنظيف فوري للرقم
-
+                        const sender = remoteJid.split("@")[0].split(":")[0].replace(/\D/g, '');
                         const text = msg.message.conversation || msg.message.extendedTextMessage?.text;
 
                         if (text) {
@@ -218,12 +198,11 @@ function initWhatsApp(storeId, phoneNumber = null) {
                             try {
                                 await axios.post(`${PYTHON_BACKEND_URL}/webhook/node-incoming`, {
                                     storeId: storeId,
-                                    customerPhone: sender, // استخدام الحقل الموحد مع بايثون
-                                    phone: sender, // كاحتياط
+                                    customerPhone: sender,
                                     message: text
                                 });
                             } catch (err) {
-                                console.error(`[WEBHOOK_ERR] فشل إرسال الرسالة للبايثون: ${err.message}`);
+                                console.error(`[WEBHOOK_ERR] ❌ فشل الإرسال للبايثون`);
                             }
                         }
                     }
@@ -238,75 +217,37 @@ function initWhatsApp(storeId, phoneNumber = null) {
 }
 
 /**
- * 4. مسارات API (Endpoints)
+ * مسارات الـ API
  */
-
-// بدء الجلسة أو طلب كود الربط/الباركود
 app.post('/api/session/start', async (req, res) => {
     const { storeId, phoneNumber } = req.body;
     if (!storeId) return res.status(400).json({ error: "storeId is required" });
-
     try {
         const result = await initWhatsApp(storeId, phoneNumber);
         res.json(result);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
+    } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
-// إرسال رسالة
 app.post('/api/message/send', async (req, res) => {
     try {
-        // استقبال customerPhone (وترك phone كاحتياط)
-        const { storeId, customerPhone, phone, text } = req.body;
-        const targetPhone = customerPhone || phone;
-        
-        console.log(`📩 طلب إرسال للمتجر ${storeId} -> ${targetPhone}`);
-
-        if (!storeId || !targetPhone || !text) {
-            return res.status(400).json({ error: "Missing parameters" });
-        }
-
-        // تنظيف الرقم تحسباً لأي زوائد
-        const cleanPhone = String(targetPhone).split('@')[0].split(':')[0].replace(/\D/g, '');
-
+        const { storeId, customerPhone, text } = req.body;
+        const cleanPhone = String(customerPhone).replace(/\D/g, '');
         let sock = activeSessions[storeId];
 
         if (!sock) {
-            console.log(`🔄 الجلسة خاملة، محاولة إعادة التنشيط للمتجر ${storeId}...`);
             await initWhatsApp(storeId);
             await new Promise(r => setTimeout(r, 3000));
             sock = activeSessions[storeId];
         }
 
-        if (!sock) {
-            return res.status(404).json({ error: "Store session not found" });
+        if (sock) {
+            await sock.sendMessage(`${cleanPhone}@s.whatsapp.net`, { text: text });
+            res.json({ status: "success", sentTo: cleanPhone });
+        } else {
+            res.status(404).json({ error: "Session not found" });
         }
-
-        // الإرسال الفعلي
-        await sock.sendMessage(`${cleanPhone}@s.whatsapp.net`, { text: text });
-        console.log(`✅ [SUCCESS] تم إرسال الرسالة للمتجر ${storeId} إلى ${cleanPhone}`);
-        res.json({ status: "success", sentTo: cleanPhone });
-
-    } catch (error) {
-        console.error(`❌ [ERROR] فشل الإرسال للواتساب: ${error.message}`);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// التحقق من صحة السيرفر
-app.get('/health', (req, res) => {
-    res.json({ 
-        status: "online", 
-        active_stores: Object.keys(activeSessions).length 
-    });
-});
-
-app.get('/', (req, res) => {
-    res.send("Jaddahh WhatsApp Bridge is Live!");
+    } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`🚀 Node.js WhatsApp Bridge is running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`🚀 Node.js Bridge on port ${PORT}`));
