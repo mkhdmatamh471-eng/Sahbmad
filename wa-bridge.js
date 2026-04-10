@@ -1,4 +1,4 @@
-const express = require('express');
+Const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const { 
@@ -159,16 +159,16 @@ function initWhatsApp(storeId, phoneNumber = null) {
                         setTimeout(() => initWhatsApp(storeId, phoneNumber).catch(() => {}), 10000);
                     }
                 } 
-
+                
                 else if (connection === "open") {
                     console.log(`[WA_READY] 🎉 متصل بنجاح: ${storeId}`);
-
+                    
                     // --- تحديث: حفظ الربط بين LID والرقم الحقيقي ---
                     if (phoneNumber) {
                         try {
                             const myLid = sock.user.id.split(':')[0].split('@')[0];
                             const myRealPhone = phoneNumber.replace(/\D/g, '');
-
+                            
                             console.log(`[MAPPING] 🔗 حفظ الربط: ${myRealPhone} <-> ${myLid}`);
                             await pool.query(
                                 "INSERT INTO phone_mappings (store_id, lid, real_phone) VALUES ($1, $2, $3) ON CONFLICT (lid) DO UPDATE SET real_phone = $3",
@@ -178,7 +178,7 @@ function initWhatsApp(storeId, phoneNumber = null) {
                             console.error(`[MAPPING_ERR] ❌ فشل حفظ الربط: ${err.message}`);
                         }
                     }
-
+                    
                     retryCount[storeId] = 0;
                     resolve({ status: "connected" });
                 }
@@ -229,55 +229,41 @@ app.post('/api/session/start', async (req, res) => {
 });
 
 app.post('/api/message/send', async (req, res) => {
-    console.log(`[API_START] 📥 استلام طلب إرسال جديد من بايثون`);
-    
     try {
-        // طباعة تفاصيل الطلب القادم للتأكد من وصوله
-        console.log(`[REQUEST_BODY] البيانات المستلمة:`, JSON.stringify(req.body));
-        
         const { storeId, customerPhone, text } = req.body;
+        let cleanPhone = String(customerPhone).replace(/\D/g, '');
         
-        if (!storeId || !customerPhone || !text) {
-            console.error(`[VALIDATION_ERR] ❌ البيانات ناقصة. storeId: ${storeId}, customerPhone: ${customerPhone}, text: ${text ? 'موجود' : 'مفقود'}`);
-            return res.status(400).json({ error: "Missing parameters" });
-        }
-
-        const cleanPhone = String(customerPhone).replace(/\D/g, '');
-        console.log(`[CLEAN_PHONE] 🧹 الرقم بعد التنظيف: ${cleanPhone}`);
-
+        // التأكد من إضافة النطاق الصحيح
+        const jid = cleanPhone.includes('@') ? cleanPhone : `${cleanPhone}@s.whatsapp.net`;
+        
         let sock = activeSessions[storeId];
 
         if (!sock) {
-            console.log(`[SESSION_RESTART] 🔄 الجلسة غير نشطة للمتجر ${storeId}. جاري محاولة إعادة التنشيط...`);
-            try {
-                await initWhatsApp(storeId);
-                await new Promise(r => setTimeout(r, 3000));
-                sock = activeSessions[storeId];
-                if (!sock) {
-                     console.error(`[SESSION_FAIL] ❌ فشلت إعادة تنشيط الجلسة للمتجر ${storeId}.`);
-                     return res.status(404).json({ error: "Session not found after retry" });
-                }
-            } catch (initErr) {
-                 console.error(`[INIT_ERR] ❌ خطأ أثناء محاولة تشغيل الجلسة:`, initErr.message);
-                 return res.status(500).json({ error: `Init error: ${initErr.message}` });
+            console.log(`[RECONNECT] الجلسة غير نشطة للمتجر ${storeId}، محاولة إعادة الاتصال...`);
+            await initWhatsApp(storeId);
+            // انتظر قليلاً حتى تكتمل المزامنة (Connection Open)
+            let waitTime = 0;
+            while (!activeSessions[storeId] && waitTime < 10) {
+                await new Promise(r => setTimeout(r, 1000));
+                waitTime++;
             }
+            sock = activeSessions[storeId];
         }
 
-        const jid = `${cleanPhone}@s.whatsapp.net`;
-        console.log(`[SENDING] 🚀 جاري إرسال الرسالة إلى: ${jid}`);
-
-        // الإرسال الفعلي
-        await sock.sendMessage(jid, { text: text });
-        
-        console.log(`[SEND_SUCCESS] ✅ تمت عملية الإرسال بنجاح للرقم: ${cleanPhone}`);
-        res.json({ status: "success", sentTo: cleanPhone });
-
+        if (sock && sock.user) {
+            // تنفيذ الإرسال مع انتظار النتيجة من الخادم
+            const sentMsg = await sock.sendMessage(jid, { text: text });
+            
+            console.log(`[SEND_RESULT] تم تسليم الرسالة للطابور:`, sentMsg.key.id);
+            res.json({ status: "success", messageId: sentMsg.key.id });
+        } else {
+            res.status(404).json({ error: "Session not ready or failed to connect" });
+        }
     } catch (error) {
-        console.error(`[SEND_CATCH_ERR] ❌ حدث خطأ فادح أثناء الإرسال:`, error);
-        res.status(500).json({ error: error.message || "Internal server error" });
+        console.error(`[SEND_ERROR] ❌ فشل فعلي في الإرسال: ${error.message}`);
+        res.status(500).json({ error: error.message });
     }
 });
-
-
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 Node.js Bridge on port ${PORT}`));
+
