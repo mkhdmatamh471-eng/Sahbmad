@@ -1,4 +1,4 @@
-Const express = require('express');
+const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const { 
@@ -116,6 +116,8 @@ function initWhatsApp(storeId, phoneNumber = null) {
                 printQRInTerminal: false,
                 syncFullHistory: false,
                 connectTimeoutMs: 60000,
+                // تسريع عملية إعادة المحاولة الداخلية في المكتبة
+                transactionOpts: { maxRetries: 5, delayBetweenRetriesMs: 1000 },
             });
 
             activeSessions[storeId] = sock;
@@ -159,16 +161,15 @@ function initWhatsApp(storeId, phoneNumber = null) {
                         setTimeout(() => initWhatsApp(storeId, phoneNumber).catch(() => {}), 10000);
                     }
                 } 
-                
+
                 else if (connection === "open") {
                     console.log(`[WA_READY] 🎉 متصل بنجاح: ${storeId}`);
-                    
-                    // --- تحديث: حفظ الربط بين LID والرقم الحقيقي ---
+
                     if (phoneNumber) {
                         try {
                             const myLid = sock.user.id.split(':')[0].split('@')[0];
                             const myRealPhone = phoneNumber.replace(/\D/g, '');
-                            
+
                             console.log(`[MAPPING] 🔗 حفظ الربط: ${myRealPhone} <-> ${myLid}`);
                             await pool.query(
                                 "INSERT INTO phone_mappings (store_id, lid, real_phone) VALUES ($1, $2, $3) ON CONFLICT (lid) DO UPDATE SET real_phone = $3",
@@ -178,27 +179,36 @@ function initWhatsApp(storeId, phoneNumber = null) {
                             console.error(`[MAPPING_ERR] ❌ فشل حفظ الربط: ${err.message}`);
                         }
                     }
-                    
+
                     retryCount[storeId] = 0;
                     resolve({ status: "connected" });
                 }
             });
 
-            // استقبال الرسائل
+            // 🌟 التعديل الأول: استقبال الرسائل وإرسال الـ JID كاملاً
             sock.ev.on("messages.upsert", async (m) => {
                 if (m.type !== "notify") return;
                 for (const msg of m.messages) {
                     if (!msg.key.fromMe && msg.message) {
                         const remoteJid = msg.key.remoteJid;
-                        const sender = remoteJid.split("@")[0].split(":")[0].replace(/\D/g, '');
+                        
+                        // تنظيف الـ JID من كود الجهاز المعقد (مثل 967...@s.whatsapp.net:44)
+                        // مع الاحتفاظ بالنطاق (@lid أو @s.whatsapp.net)
+                        let senderJid = remoteJid;
+                        if (remoteJid.includes('@')) {
+                            const [numberPart, domainPart] = remoteJid.split('@');
+                            const cleanNumber = numberPart.split(':')[0];
+                            senderJid = `${cleanNumber}@${domainPart}`;
+                        }
+
                         const text = msg.message.conversation || msg.message.extendedTextMessage?.text;
 
                         if (text) {
-                            console.log(`[INCOMING] ${storeId} <- ${sender}: ${text}`);
+                            console.log(`[INCOMING] ${storeId} <- ${senderJid}: ${text}`);
                             try {
                                 await axios.post(`${PYTHON_BACKEND_URL}/webhook/node-incoming`, {
                                     storeId: storeId,
-                                    customerPhone: sender,
+                                    customerPhone: senderJid, // الآن بايثون سيتلقى JID كامل وصحيح
                                     message: text
                                 });
                             } catch (err) {
@@ -228,42 +238,63 @@ app.post('/api/session/start', async (req, res) => {
     } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
+// 🌟 التعديل الثاني والثالث: مسار الإرسال الذكي والمحمي من التعليق
 app.post('/api/message/send', async (req, res) => {
     try {
         const { storeId, customerPhone, text } = req.body;
-        let cleanPhone = String(customerPhone).replace(/\D/g, '');
         
-        // التأكد من إضافة النطاق الصحيح
-        const jid = cleanPhone.includes('@') ? cleanPhone : `${cleanPhone}@s.whatsapp.net`;
+        // تحديد الـ JID الصحيح بذكاء
+        let jid = String(customerPhone);
         
+        if (!jid.includes('@')) {
+            // إذا لم يحتوي على '@' نقوم بتنظيفه وتوقع النطاق
+            const cleanPhone = jid.replace(/\D/g, '');
+            if (cleanPhone.length >= 15 || cleanPhone.startsWith('257')) {
+                jid = `${cleanPhone}@lid`;
+            } else {
+                jid = `${cleanPhone}@s.whatsapp.net`;
+            }
+        } else {
+            // إذا كان يحتوي على '@' (قادم من البايثون)، نتأكد فقط من إزالة كود الجهاز
+            const [numPart, domainPart] = jid.split('@');
+            jid = `${numPart.split(':')[0]}@${domainPart}`;
+        }
+
         let sock = activeSessions[storeId];
 
-        if (!sock) {
-            console.log(`[RECONNECT] الجلسة غير نشطة للمتجر ${storeId}، محاولة إعادة الاتصال...`);
+        if (!sock || !sock.user) {
+            console.log(`[RECONNECT] 🔄 الجلسة غير نشطة للمتجر ${storeId}، جاري الاستعادة...`);
             await initWhatsApp(storeId);
-            // انتظر قليلاً حتى تكتمل المزامنة (Connection Open)
-            let waitTime = 0;
-            while (!activeSessions[storeId] && waitTime < 10) {
-                await new Promise(r => setTimeout(r, 1000));
-                waitTime++;
-            }
+            await new Promise(r => setTimeout(r, 2000));
             sock = activeSessions[storeId];
+            if (!sock) return res.status(404).json({ error: "Session not found or not connected" });
         }
 
-        if (sock && sock.user) {
-            // تنفيذ الإرسال مع انتظار النتيجة من الخادم
-            const sentMsg = await sock.sendMessage(jid, { text: text });
-            
-            console.log(`[SEND_RESULT] تم تسليم الرسالة للطابور:`, sentMsg.key.id);
-            res.json({ status: "success", messageId: sentMsg.key.id });
-        } else {
-            res.status(404).json({ error: "Session not ready or failed to connect" });
+        console.log(`[SENDING] 🚀 محاولة الإرسال الفعلي إلى: ${jid}`);
+
+        // استخدام Promise.race لمنع التعليق
+        const sendMessagePromise = sock.sendMessage(jid, { text: text });
+        const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error("TIMEOUT")), 15000) // مهلة 15 ثانية
+        );
+
+        const sentMsg = await Promise.race([sendMessagePromise, timeoutPromise]);
+
+        if (sentMsg) {
+            console.log(`[SEND_SUCCESS] ✅ تم استلام التأكيد من السيرفر. ID: ${sentMsg.key.id}`);
+            res.json({ status: "success", messageId: sentMsg.key.id, sentTo: jid });
         }
+
     } catch (error) {
-        console.error(`[SEND_ERROR] ❌ فشل فعلي في الإرسال: ${error.message}`);
-        res.status(500).json({ error: error.message });
+        if (error.message === "TIMEOUT") {
+            console.error(`[SEND_TIMEOUT] ⏳ تعلقت عملية الإرسال! السيرفر لم يرد.`);
+            res.status(504).json({ error: "تعذر الوصول لخادم واتساب (Timeout)" });
+        } else {
+            console.error(`[SEND_ERROR] ❌ فشل فعلي: ${error.message}`);
+            res.status(500).json({ error: error.message });
+        }
     }
 });
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 Node.js Bridge on port ${PORT}`));
-
