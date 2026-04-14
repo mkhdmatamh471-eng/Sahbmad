@@ -22,6 +22,7 @@ const PYTHON_BACKEND_URL = process.env.PYTHON_BACKEND_URL || "https://your-pytho
 const activeSessions = {};
 const retryCount = {};
 
+// إعداد قاعدة البيانات مع تحسين الأداء
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false },
@@ -31,7 +32,7 @@ const pool = new Pool({
 });
 
 /**
- * دالة إدارة الجلسة من PostgreSQL - محسنة لضمان ثبات التشفير
+ * إدارة الجلسة من PostgreSQL - نسخة الإصلاح الجذري للتشفير
  */
 async function usePostgresAuthState(sessionId) {
     const writeData = async (data, id) => {
@@ -41,7 +42,9 @@ async function usePostgresAuthState(sessionId) {
                 "INSERT INTO whatsapp_sessions (id, data) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET data = $2",
                 [`${sessionId}_${id}`, jsonStr]
             );
-        } catch (err) { /* تسجيل صامت لتجنب إغراق السجلات */ }
+        } catch (err) {
+            console.error(`[DB_WRITE_ERR] ❌ ${id}:`, err.message);
+        }
     };
 
     const readData = async (id) => {
@@ -52,7 +55,9 @@ async function usePostgresAuthState(sessionId) {
     };
 
     const removeData = async (id) => {
-        await pool.query("DELETE FROM whatsapp_sessions WHERE id = $1", [`${sessionId}_${id}`]);
+        try {
+            await pool.query("DELETE FROM whatsapp_sessions WHERE id = $1", [`${sessionId}_${id}`]);
+        } catch (e) {}
     };
 
     const creds = await readData('creds') || initAuthCreds();
@@ -73,12 +78,20 @@ async function usePostgresAuthState(sessionId) {
                     return data;
                 },
                 set: async (data) => {
+                    // 🛠️ إصلاح PreKey: ضمان حفظ جميع المفاتيح بشكل متزامن قبل المتابعة
+                    const tasks = [];
                     for (const type in data) {
                         for (const id in data[type]) {
                             const value = data[type][id];
-                            value ? await writeData(value, `${type}-${id}`) : await removeData(`${type}-${id}`);
+                            const keyPath = `${type}-${id}`;
+                            if (value) {
+                                tasks.push(writeData(value, keyPath));
+                            } else {
+                                tasks.push(removeData(keyPath));
+                            }
                         }
                     }
+                    await Promise.all(tasks);
                 }
             }
         },
@@ -87,14 +100,13 @@ async function usePostgresAuthState(sessionId) {
 }
 
 /**
- * المحرك الرئيسي مع معالجة الأخطاء الشاملة
+ * المحرك الرئيسي - مع تعطيل المزامنة الثقيلة لمنع الانهيار
  */
 function initWhatsApp(storeId, phoneNumber = null) {
     return new Promise(async (resolve, reject) => {
         
-        // تنظيف عميق للجلسة السابقة (حل مشاكل الذاكرة)
         if (activeSessions[storeId]) {
-            console.log(`[CLEANUP] 🔄 تنظيف جلسة المتجر ${storeId}`);
+            console.log(`[CLEANUP] 🔄 إعادة تهيئة الجلسة للمتجر ${storeId}`);
             try {
                 activeSessions[storeId].ev.removeAllListeners();
                 if (activeSessions[storeId].ws) activeSessions[storeId].ws.close();
@@ -105,7 +117,9 @@ function initWhatsApp(storeId, phoneNumber = null) {
 
         try {
             const { state, saveCreds } = await usePostgresAuthState(storeId);
-            const { version } = await fetchLatestBaileysVersion();
+            
+            // استخدام نسخة ثابتة ومستقرة لتجنب مشاكل الـ Binary Protocol
+            const version = [2, 3000, 1015901307]; 
 
             const sock = makeWASocket({
                 version,
@@ -113,16 +127,15 @@ function initWhatsApp(storeId, phoneNumber = null) {
                 logger: pino({ level: "error" }),
                 browser: ["Ubuntu", "Chrome", "20.0.04"],
                 printQRInTerminal: false,
-                syncFullHistory: false, // أساسي لتقليل استهلاك الرام
+                syncFullHistory: false,           // توفير الرام
+                shouldSyncHistoryMessage: () => false, // 🛠️ منع أخطاء bad-request
                 connectTimeoutMs: 60000,
-                keepAliveIntervalMs: 30000, // نبضات قلب لمنع خمول Render
-                generateHighQualityLinkPreview: false,
-                transactionOpts: { maxRetries: 2, delayBetweenRetriesMs: 3000 },
+                keepAliveIntervalMs: 30000,       // منع خمول Render
+                transactionOpts: { maxRetries: 3, delayBetweenRetriesMs: 2000 },
             });
 
             activeSessions[storeId] = sock;
 
-            // كود الربط (Pairing)
             if (!sock.authState.creds.registered && phoneNumber) {
                 setTimeout(async () => {
                     try {
@@ -143,60 +156,52 @@ function initWhatsApp(storeId, phoneNumber = null) {
 
                 if (connection === "close") {
                     const statusCode = (lastDisconnect?.error instanceof Boom)?.output?.statusCode;
-                    const isLoggedOut = statusCode === DisconnectReason.loggedOut || statusCode === 401;
-
-                    console.log(`[CONN_LOST] ⚠️ فصل المتجر ${storeId}. الرمز: ${statusCode}`);
+                    console.log(`[CONN_LOST] ❌ فصل: ${storeId} | الرمز: ${statusCode}`);
 
                     if (activeSessions[storeId]) {
                         activeSessions[storeId].ev.removeAllListeners();
                         delete activeSessions[storeId];
                     }
 
-                    if (isLoggedOut) {
+                    if (statusCode === DisconnectReason.loggedOut) {
                         await pool.query("DELETE FROM whatsapp_sessions WHERE id LIKE $1", [`${storeId}_%`]);
                         reject(new Error("SESSION_TERMINATED"));
                     } else {
                         setTimeout(() => initWhatsApp(storeId, phoneNumber).catch(() => {}), 10000);
                     }
                 } else if (connection === "open") {
-                    console.log(`[CONN_OPEN] ✅ المتجر ${storeId} متصل ومستعد.`);
-                    
-                    // تحديث الـ Phone Mapping تلقائياً
+                    console.log(`[CONN_OPEN] ✅ المتجر ${storeId} متصل.`);
                     if (phoneNumber && sock.user) {
                         const myLid = sock.user.id.split(':')[0].split('@')[0];
                         await pool.query(
                             "INSERT INTO phone_mappings (store_id, lid, real_phone) VALUES ($1, $2, $3) ON CONFLICT (lid) DO UPDATE SET real_phone = $3",
                             [storeId, myLid, phoneNumber.replace(/\D/g, '')]
-                        ).catch(e => console.error("[MAP_ERR]", e.message));
+                        ).catch(() => {});
                     }
-                    
-                    retryCount[storeId] = 0;
                     resolve({ status: "connected" });
                 }
             });
 
-            // استقبال الرسائل ومعالجة الـ JID
             sock.ev.on("messages.upsert", async (m) => {
                 if (m.type !== "notify") return;
-                
-                // حل مشكلة 428 الصامت (التحقق من حالة المقبس)
                 if (!sock.ws || sock.ws.readyState !== 1) return;
 
                 for (const msg of m.messages) {
                     if (!msg.key.fromMe && msg.message) {
                         const remoteJid = msg.key.remoteJid;
-                        let senderJid = remoteJid.includes(':') ? `${remoteJid.split(':')[0]}@${remoteJid.split('@')[1]}` : remoteJid;
+                        // تنظيف الـ JID لاستخدامه في البايثون
+                        const senderJid = remoteJid.includes(':') ? `${remoteJid.split(':')[0]}@${remoteJid.split('@')[1]}` : remoteJid;
 
                         const text = msg.message.conversation || 
                                      msg.message.extendedTextMessage?.text || 
-                                     msg.message.buttonsResponseMessage?.selectedButtonId;
+                                     msg.message.buttonsResponseMessage?.selectedButtonId ||
+                                     msg.message.listResponseMessage?.title;
 
                         if (text) {
-                            console.log(`[INCOMING] ${storeId} <- ${senderJid}: ${text}`);
+                            console.log(`[INCOMING] 📨 ${storeId} <- ${senderJid}: ${text}`);
                             axios.post(`${PYTHON_BACKEND_URL}/webhook/node-incoming`, {
                                 storeId, customerPhone: senderJid, message: text
-                            }, { timeout: 8000 })
-                            .catch(err => console.error(`[WEBHOOK_ERR] ❌ ${err.message}`));
+                            }, { timeout: 8000 }).catch(() => {});
                         }
                     }
                 }
@@ -210,10 +215,8 @@ function initWhatsApp(storeId, phoneNumber = null) {
 }
 
 /**
- * مسارات الـ API
+ * مسارات API
  */
-app.get('/health', (req, res) => res.send("System Active 🚀"));
-
 app.post('/api/session/start', async (req, res) => {
     const { storeId, phoneNumber } = req.body;
     try {
@@ -227,12 +230,9 @@ app.post('/api/message/send', async (req, res) => {
         const { storeId, customerPhone, text } = req.body;
         let sock = activeSessions[storeId];
 
-        // التحقق من صحة الاتصال قبل الإرسال لمنع تعليق الطلب
         if (!sock || !sock.ws || sock.ws.readyState !== 1) {
-            console.log(`[AUTO_REC] 🔄 استعادة الجلسة للمتجر ${storeId}`);
             await initWhatsApp(storeId);
             sock = activeSessions[storeId];
-            if (!sock) throw new Error("Session unavailable");
         }
 
         const jid = customerPhone.includes('@') ? customerPhone : `${customerPhone.replace(/\D/g, '')}@s.whatsapp.net`;
@@ -242,11 +242,13 @@ app.post('/api/message/send', async (req, res) => {
             new Promise((_, r) => setTimeout(() => r(new Error("TIMEOUT")), 15000))
         ]);
 
-        res.json({ status: "success", messageId: sent.key.id });
+        res.json({ status: "success", id: sent.key.id });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
 
+app.get('/health', (req, res) => res.send("OK"));
+
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Node.js Bridge on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Bridge v3 Active on port ${PORT}`));
