@@ -19,16 +19,16 @@ app.use(express.json());
 
 const PYTHON_BACKEND_URL = process.env.PYTHON_BACKEND_URL || "";
 const activeSessions = {};
-const isConnecting = {}; // قفل لمنع محاولات الاتصال المتزامنة لنفس المتجر
+const isConnecting = {}; 
 
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false },
-    max: 5, // تقليل عدد الاتصالات لتوفير الذاكرة على Render
+    max: 5, 
 });
 
 /**
- * إدارة الجلسة - حفظ مفاتيح التشفير
+ * دالة إدارة الجلسة وتخزين المفاتيح في PostgreSQL
  */
 async function usePostgresAuthState(sessionId) {
     const writeData = async (data, id) => {
@@ -87,14 +87,12 @@ async function usePostgresAuthState(sessionId) {
 }
 
 /**
- * المحرك الرئيسي - مع نظام "القفل" لمنع التكرار
+ * المحرك الرئيسي للاتصال
  */
 async function initWhatsApp(storeId, phoneNumber = null) {
-    // 1. إذا كان المتجر في حالة اتصال حالياً، لا تفعل شيئاً
     if (isConnecting[storeId]) return;
     isConnecting[storeId] = true;
 
-    // 2. تنظيف شامل قبل البدء
     if (activeSessions[storeId]) {
         try {
             activeSessions[storeId].ev.removeAllListeners();
@@ -104,7 +102,7 @@ async function initWhatsApp(storeId, phoneNumber = null) {
     }
 
     try {
-        console.log(`[START] 🚀 بدء جلسة المتجر: ${storeId}`);
+        console.log(`[START] 🚀 بدء الجلسة للمتجر: ${storeId}`);
         const { state, saveCreds } = await usePostgresAuthState(storeId);
         
         const sock = makeWASocket({
@@ -114,19 +112,21 @@ async function initWhatsApp(storeId, phoneNumber = null) {
             browser: ["Ubuntu", "Chrome", "20.0.04"],
             syncFullHistory: false,
             shouldSyncHistoryMessage: () => false,
-            connectTimeoutMs: 15000, // مهلة قصيرة لقتل المحاولات الفاشلة بسرعة
+            connectTimeoutMs: 20000,
             keepAliveIntervalMs: 60000,
         });
 
         activeSessions[storeId] = sock;
 
-        // طلب كود الربط (Pairing)
+        // توليد كود الربط
         if (!sock.authState.creds.registered && phoneNumber) {
             setTimeout(async () => {
                 try {
                     const code = await sock.requestPairingCode(phoneNumber.replace(/\D/g, ''));
                     console.log(`[CODE] 🔑 المتجر ${storeId}: ${code}`);
-                } catch (err) {}
+                } catch (err) {
+                    console.error("Pairing Error:", err.message);
+                }
             }, 5000);
         }
 
@@ -136,21 +136,19 @@ async function initWhatsApp(storeId, phoneNumber = null) {
             const { connection, lastDisconnect } = update;
 
             if (connection === "open") {
-                console.log(`[READY] ✅ المتجر ${storeId} متصل الآن.`);
-                isConnecting[storeId] = false; // فتح القفل عند النجاح
+                console.log(`[READY] ✅ المتجر ${storeId} متصل.`);
+                isConnecting[storeId] = false;
             }
 
             if (connection === "close") {
-                isConnecting[storeId] = false; // فتح القفل للسماح بإعادة المحاولة المنظمة
+                isConnecting[storeId] = false;
                 const statusCode = (lastDisconnect?.error instanceof Boom)?.output?.statusCode;
                 
-                console.log(`[CLOSE] 🚪 المتجر ${storeId} انفصل (رمز: ${statusCode})`);
-
                 if (statusCode !== DisconnectReason.loggedOut) {
-                    // انتظار 15 ثانية كاملة قبل السماح بإعادة المحاولة (كسر الحلقة)
-                    console.log(`[RETRY] ⏳ انتظار 15 ثانية قبل إعادة المحاولة لـ ${storeId}...`);
+                    console.log(`[RETRY] ⏳ محاولة إعادة اتصال للمتجر ${storeId} بعد 15 ثانية...`);
                     setTimeout(() => initWhatsApp(storeId, phoneNumber), 15000);
                 } else {
+                    console.log(`[LOGOUT] 🚪 المتجر ${storeId} سجل خروجه.`);
                     await pool.query("DELETE FROM whatsapp_sessions WHERE id LIKE $1", [`${storeId}_%`]);
                 }
             }
@@ -178,23 +176,42 @@ async function initWhatsApp(storeId, phoneNumber = null) {
 }
 
 /**
- * المسارات
+ * مسارات API - معدلة لتناسب الفرونت اند
  */
 app.post('/api/session/start', async (req, res) => {
     const { storeId, phoneNumber } = req.body;
-    initWhatsApp(storeId, phoneNumber); // تشغيل في الخلفية
-    res.json({ status: "initiated", message: "جاري بدء الجلسة، راقب السجلات" });
+    
+    if (!storeId || !phoneNumber) {
+        return res.status(400).json({ status: "error", message: "البيانات ناقصة" });
+    }
+
+    try {
+        // نطلق العملية في الخلفية ونرسل استجابة فورية للفرونت اند
+        initWhatsApp(storeId, phoneNumber);
+        
+        // هذه الاستجابة ستحل مشكلة "status of null" في واجهتك
+        return res.status(200).json({ 
+            status: "success", 
+            message: "جاري المعالجة... راقب المتصفح لظهور الكود" 
+        });
+    } catch (e) {
+        return res.status(500).json({ status: "error", message: e.message });
+    }
 });
 
 app.post('/api/message/send', async (req, res) => {
     const { storeId, customerPhone, text } = req.body;
     const sock = activeSessions[storeId];
-    if (!sock) return res.status(404).json({ error: "Session offline" });
+    
+    if (!sock) return res.status(404).json({ status: "error", message: "الجلسة غير نشطة" });
+    
     try {
         await sock.sendMessage(customerPhone, { text });
         res.json({ status: "sent" });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    } catch (e) { 
+        res.status(500).json({ status: "error", message: e.message }); 
+    }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Final Stable Bridge on ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Final Stable Bridge v7.0 on port ${PORT}`));
