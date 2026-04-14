@@ -93,12 +93,17 @@ async function usePostgresAuthState(sessionId) {
  */
 function initWhatsApp(storeId, phoneNumber = null) {
     return new Promise(async (resolve, reject) => {
+        
+        // 🛠️ التعديل الأول: التنظيف العميق للجلسة السابقة لمنع تسريب الذاكرة
         if (activeSessions[storeId]) {
-            if (phoneNumber) {
-                console.log(`[CLEANUP] 🔄 إنهاء الجلسة القديمة للمتجر ${storeId} لطلب كود جديد...`);
-                try { activeSessions[storeId].end(); } catch (e) {}
-                delete activeSessions[storeId];
-            } else {
+            console.log(`[CLEANUP] 🔄 تنظيف الجلسة القديمة للمتجر ${storeId} من الذاكرة...`);
+            try {
+                activeSessions[storeId].ev.removeAllListeners(); // مسح كل الأحداث المعلقة
+                activeSessions[storeId].ws.close(); // إغلاق الاتصال الفعلي
+            } catch (e) {}
+            delete activeSessions[storeId];
+            
+            if (!phoneNumber) {
                 return resolve({ status: "ALREADY_CONNECTED" });
             }
         }
@@ -114,10 +119,9 @@ function initWhatsApp(storeId, phoneNumber = null) {
                 logger: pino({ level: "silent" }),
                 browser: ["Ubuntu", "Chrome", "20.0.04"],
                 printQRInTerminal: false,
-                syncFullHistory: false,
+                syncFullHistory: false, // تعطيل مزامنة السجل القديم لتوفير الذاكرة
                 connectTimeoutMs: 60000,
-                // تسريع عملية إعادة المحاولة الداخلية في المكتبة
-                transactionOpts: { maxRetries: 5, delayBetweenRetriesMs: 1000 },
+                transactionOpts: { maxRetries: 3, delayBetweenRetriesMs: 2000 },
             });
 
             activeSessions[storeId] = sock;
@@ -131,7 +135,10 @@ function initWhatsApp(storeId, phoneNumber = null) {
                         const code = await sock.requestPairingCode(cleanNumber);
                         resolve({ status: "pairing_code", code: code });
                     } catch (err) {
-                        delete activeSessions[storeId];
+                        if (activeSessions[storeId]) {
+                            activeSessions[storeId].ev.removeAllListeners();
+                            delete activeSessions[storeId];
+                        }
                         reject(new Error("FAILED_TO_GENERATE_PAIRING_CODE"));
                     }
                 }, 5000);
@@ -146,18 +153,28 @@ function initWhatsApp(storeId, phoneNumber = null) {
                     resolve({ status: "qr_code", qr: qr });
                 }
 
+                // 🛠️ التعديل الثاني: الإغلاق السليم والتنظيف عند الفشل
                 if (connection === "close") {
                     const statusCode = (lastDisconnect?.error instanceof Boom)?.output?.statusCode;
                     const isLoggedOut = statusCode === DisconnectReason.loggedOut || statusCode === 401;
+
+                    console.log(`[WA_CLOSE] ⚠️ انقطاع الاتصال للمتجر ${storeId}. الرمز: ${statusCode}`);
+
+                    // تنظيف الذاكرة فوراً
+                    if (activeSessions[storeId]) {
+                        activeSessions[storeId].ev.removeAllListeners();
+                        delete activeSessions[storeId];
+                    }
 
                     if (!retryCount[storeId]) retryCount[storeId] = 0;
                     retryCount[storeId]++;
 
                     if (isLoggedOut || retryCount[storeId] > 3) {
-                        delete activeSessions[storeId];
+                        console.log(`[WA_TERMINATED] ❌ إنهاء جلسة ${storeId} بالكامل لمشكلة في المصادقة.`);
                         await pool.query("DELETE FROM whatsapp_sessions WHERE id LIKE $1", [`${storeId}_%`]);
                         reject(new Error("SESSION_TERMINATED"));
                     } else {
+                        console.log(`[WA_RECONNECT] 🔄 جاري إعادة المحاولة للمتجر ${storeId} بعد 10 ثوانٍ...`);
                         setTimeout(() => initWhatsApp(storeId, phoneNumber).catch(() => {}), 10000);
                     }
                 } 
@@ -185,15 +202,13 @@ function initWhatsApp(storeId, phoneNumber = null) {
                 }
             });
 
-            // 🌟 التعديل الأول: استقبال الرسائل وإرسال الـ JID كاملاً
+            // 🛠️ التعديل الثالث: معالجة الـ Webhooks بشكل لا يحجب الذاكرة (Non-blocking)
             sock.ev.on("messages.upsert", async (m) => {
                 if (m.type !== "notify") return;
                 for (const msg of m.messages) {
                     if (!msg.key.fromMe && msg.message) {
                         const remoteJid = msg.key.remoteJid;
-                        
-                        // تنظيف الـ JID من كود الجهاز المعقد (مثل 967...@s.whatsapp.net:44)
-                        // مع الاحتفاظ بالنطاق (@lid أو @s.whatsapp.net)
+
                         let senderJid = remoteJid;
                         if (remoteJid.includes('@')) {
                             const [numberPart, domainPart] = remoteJid.split('@');
@@ -205,22 +220,26 @@ function initWhatsApp(storeId, phoneNumber = null) {
 
                         if (text) {
                             console.log(`[INCOMING] ${storeId} <- ${senderJid}: ${text}`);
-                            try {
-                                await axios.post(`${PYTHON_BACKEND_URL}/webhook/node-incoming`, {
-                                    storeId: storeId,
-                                    customerPhone: senderJid, // الآن بايثون سيتلقى JID كامل وصحيح
-                                    message: text
-                                });
-                            } catch (err) {
-                                console.error(`[WEBHOOK_ERR] ❌ فشل الإرسال للبايثون`);
-                            }
+                            
+                            // تمت إزالة الـ await وإضافة مهلة زمنية (timeout) لتجنب تعليق الخادم
+                            axios.post(`${PYTHON_BACKEND_URL}/webhook/node-incoming`, {
+                                storeId: storeId,
+                                customerPhone: senderJid,
+                                message: text
+                            }, { timeout: 8000 })
+                            .catch(err => {
+                                console.error(`[WEBHOOK_ERR] ❌ فشل الإرسال للبايثون: ${err.message}`);
+                            });
                         }
                     }
                 }
             });
 
         } catch (err) {
-            delete activeSessions[storeId];
+            if (activeSessions[storeId]) {
+                activeSessions[storeId].ev.removeAllListeners();
+                delete activeSessions[storeId];
+            }
             reject(err);
         }
     });
@@ -238,16 +257,13 @@ app.post('/api/session/start', async (req, res) => {
     } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
-// 🌟 التعديل الثاني والثالث: مسار الإرسال الذكي والمحمي من التعليق
 app.post('/api/message/send', async (req, res) => {
     try {
         const { storeId, customerPhone, text } = req.body;
-        
-        // تحديد الـ JID الصحيح بذكاء
+
         let jid = String(customerPhone);
-        
+
         if (!jid.includes('@')) {
-            // إذا لم يحتوي على '@' نقوم بتنظيفه وتوقع النطاق
             const cleanPhone = jid.replace(/\D/g, '');
             if (cleanPhone.length >= 15 || cleanPhone.startsWith('257')) {
                 jid = `${cleanPhone}@lid`;
@@ -255,7 +271,6 @@ app.post('/api/message/send', async (req, res) => {
                 jid = `${cleanPhone}@s.whatsapp.net`;
             }
         } else {
-            // إذا كان يحتوي على '@' (قادم من البايثون)، نتأكد فقط من إزالة كود الجهاز
             const [numPart, domainPart] = jid.split('@');
             jid = `${numPart.split(':')[0]}@${domainPart}`;
         }
@@ -272,10 +287,9 @@ app.post('/api/message/send', async (req, res) => {
 
         console.log(`[SENDING] 🚀 محاولة الإرسال الفعلي إلى: ${jid}`);
 
-        // استخدام Promise.race لمنع التعليق
         const sendMessagePromise = sock.sendMessage(jid, { text: text });
         const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error("TIMEOUT")), 15000) // مهلة 15 ثانية
+            setTimeout(() => reject(new Error("TIMEOUT")), 15000)
         );
 
         const sentMsg = await Promise.race([sendMessagePromise, timeoutPromise]);
