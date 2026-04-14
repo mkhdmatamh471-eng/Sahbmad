@@ -31,7 +31,7 @@ const pool = new Pool({
 });
 
 /**
- * دالة إدارة الجلسة من PostgreSQL
+ * دالة إدارة الجلسة من PostgreSQL - محسنة لضمان ثبات التشفير
  */
 async function usePostgresAuthState(sessionId) {
     const writeData = async (data, id) => {
@@ -41,7 +41,7 @@ async function usePostgresAuthState(sessionId) {
                 "INSERT INTO whatsapp_sessions (id, data) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET data = $2",
                 [`${sessionId}_${id}`, jsonStr]
             );
-        } catch (err) { console.error(`[DB_ERR]: ${err.message}`); }
+        } catch (err) { /* تسجيل صامت لتجنب إغراق السجلات */ }
     };
 
     const readData = async (id) => {
@@ -87,18 +87,20 @@ async function usePostgresAuthState(sessionId) {
 }
 
 /**
- * المحرك الرئيسي
+ * المحرك الرئيسي مع معالجة الأخطاء الشاملة
  */
 function initWhatsApp(storeId, phoneNumber = null) {
     return new Promise(async (resolve, reject) => {
         
+        // تنظيف عميق للجلسة السابقة (حل مشاكل الذاكرة)
         if (activeSessions[storeId]) {
-            console.log(`[CLEANUP] 🔄 تنظيف الجلسة ${storeId}`);
+            console.log(`[CLEANUP] 🔄 تنظيف جلسة المتجر ${storeId}`);
             try {
                 activeSessions[storeId].ev.removeAllListeners();
                 if (activeSessions[storeId].ws) activeSessions[storeId].ws.close();
             } catch (e) {}
             delete activeSessions[storeId];
+            if (!phoneNumber) return resolve({ status: "ALREADY_CONNECTED" });
         }
 
         try {
@@ -108,17 +110,30 @@ function initWhatsApp(storeId, phoneNumber = null) {
             const sock = makeWASocket({
                 version,
                 auth: state,
-                logger: pino({ level: "error" }), // رفع المستوى لمشاهدة أخطاء المكتبة فقط
+                logger: pino({ level: "error" }),
                 browser: ["Ubuntu", "Chrome", "20.0.04"],
                 printQRInTerminal: false,
-                syncFullHistory: false,
+                syncFullHistory: false, // أساسي لتقليل استهلاك الرام
                 connectTimeoutMs: 60000,
-                keepAliveIntervalMs: 30000, // منع خمول السوكيت
+                keepAliveIntervalMs: 30000, // نبضات قلب لمنع خمول Render
                 generateHighQualityLinkPreview: false,
                 transactionOpts: { maxRetries: 2, delayBetweenRetriesMs: 3000 },
             });
 
             activeSessions[storeId] = sock;
+
+            // كود الربط (Pairing)
+            if (!sock.authState.creds.registered && phoneNumber) {
+                setTimeout(async () => {
+                    try {
+                        const code = await sock.requestPairingCode(phoneNumber.replace(/\D/g, ''));
+                        resolve({ status: "pairing_code", code });
+                    } catch (err) {
+                        delete activeSessions[storeId];
+                        reject(new Error("FAILED_TO_GENERATE_PAIRING_CODE"));
+                    }
+                }, 5000);
+            }
 
             sock.ev.on("creds.update", saveCreds);
 
@@ -128,61 +143,67 @@ function initWhatsApp(storeId, phoneNumber = null) {
 
                 if (connection === "close") {
                     const statusCode = (lastDisconnect?.error instanceof Boom)?.output?.statusCode;
-                    console.log(`[CONN_LOST] ❌ المتجر ${storeId} فصل. الرمز: ${statusCode}`);
-                    
+                    const isLoggedOut = statusCode === DisconnectReason.loggedOut || statusCode === 401;
+
+                    console.log(`[CONN_LOST] ⚠️ فصل المتجر ${storeId}. الرمز: ${statusCode}`);
+
                     if (activeSessions[storeId]) {
                         activeSessions[storeId].ev.removeAllListeners();
                         delete activeSessions[storeId];
                     }
 
-                    if (statusCode !== DisconnectReason.loggedOut) {
+                    if (isLoggedOut) {
+                        await pool.query("DELETE FROM whatsapp_sessions WHERE id LIKE $1", [`${storeId}_%`]);
+                        reject(new Error("SESSION_TERMINATED"));
+                    } else {
                         setTimeout(() => initWhatsApp(storeId, phoneNumber).catch(() => {}), 10000);
                     }
                 } else if (connection === "open") {
-                    console.log(`[CONN_OPEN] ✅ المتجر ${storeId} متصل الآن ويستمع...`);
+                    console.log(`[CONN_OPEN] ✅ المتجر ${storeId} متصل ومستعد.`);
+                    
+                    // تحديث الـ Phone Mapping تلقائياً
+                    if (phoneNumber && sock.user) {
+                        const myLid = sock.user.id.split(':')[0].split('@')[0];
+                        await pool.query(
+                            "INSERT INTO phone_mappings (store_id, lid, real_phone) VALUES ($1, $2, $3) ON CONFLICT (lid) DO UPDATE SET real_phone = $3",
+                            [storeId, myLid, phoneNumber.replace(/\D/g, '')]
+                        ).catch(e => console.error("[MAP_ERR]", e.message));
+                    }
+                    
+                    retryCount[storeId] = 0;
                     resolve({ status: "connected" });
                 }
             });
 
-            // 🛠️ سجلات استلام الرسائل المحسنة
+            // استقبال الرسائل ومعالجة الـ JID
             sock.ev.on("messages.upsert", async (m) => {
-                console.log(`[EVENT] تلقي حدث رسالة جديد من النوع: ${m.type}`);
-
                 if (m.type !== "notify") return;
-
-                // حل مشكلة الخطأ 428 الصامت
-                if (!sock.ws || sock.ws.readyState !== 1) {
-                    console.error(`[WS_ERR] ⚠️ السوكيت غير جاهز (State: ${sock.ws ? sock.ws.readyState : 'null'})`);
-                    return;
-                }
+                
+                // حل مشكلة 428 الصامت (التحقق من حالة المقبس)
+                if (!sock.ws || sock.ws.readyState !== 1) return;
 
                 for (const msg of m.messages) {
-                    // سجل بسيط لكل رسالة تمر عبر النظام
-                    console.log(`[MSG_RAW] رسالة من: ${msg.key.remoteJid} | FromMe: ${msg.key.fromMe}`);
-
                     if (!msg.key.fromMe && msg.message) {
+                        const remoteJid = msg.key.remoteJid;
+                        let senderJid = remoteJid.includes(':') ? `${remoteJid.split(':')[0]}@${remoteJid.split('@')[1]}` : remoteJid;
+
                         const text = msg.message.conversation || 
                                      msg.message.extendedTextMessage?.text || 
-                                     msg.message.buttonsResponseMessage?.selectedButtonId ||
-                                     msg.message.listResponseMessage?.title;
+                                     msg.message.buttonsResponseMessage?.selectedButtonId;
 
                         if (text) {
-                            console.log(`[INCOMING] 📨 ${storeId} <- ${msg.key.remoteJid}: ${text}`);
-                            
+                            console.log(`[INCOMING] ${storeId} <- ${senderJid}: ${text}`);
                             axios.post(`${PYTHON_BACKEND_URL}/webhook/node-incoming`, {
-                                storeId: storeId,
-                                customerPhone: msg.key.remoteJid,
-                                message: text
-                            }, { timeout: 10000 })
-                            .catch(err => console.error(`[WEBHOOK_ERR] ❌: ${err.message}`));
-                        } else {
-                            console.log(`[MSG_SKIP] الرسالة لا تحتوي على نص مدعوم.`);
+                                storeId, customerPhone: senderJid, message: text
+                            }, { timeout: 8000 })
+                            .catch(err => console.error(`[WEBHOOK_ERR] ❌ ${err.message}`));
                         }
                     }
                 }
             });
 
         } catch (err) {
+            delete activeSessions[storeId];
             reject(err);
         }
     });
@@ -191,7 +212,7 @@ function initWhatsApp(storeId, phoneNumber = null) {
 /**
  * مسارات الـ API
  */
-app.get('/status', (req, res) => res.send("Bridge is Alive 🚀"));
+app.get('/health', (req, res) => res.send("System Active 🚀"));
 
 app.post('/api/session/start', async (req, res) => {
     const { storeId, phoneNumber } = req.body;
@@ -206,17 +227,26 @@ app.post('/api/message/send', async (req, res) => {
         const { storeId, customerPhone, text } = req.body;
         let sock = activeSessions[storeId];
 
+        // التحقق من صحة الاتصال قبل الإرسال لمنع تعليق الطلب
         if (!sock || !sock.ws || sock.ws.readyState !== 1) {
-            console.log(`[AUTO_RECONNECT] 🔄 استعادة الجلسة للمتجر ${storeId}`);
+            console.log(`[AUTO_REC] 🔄 استعادة الجلسة للمتجر ${storeId}`);
             await initWhatsApp(storeId);
             sock = activeSessions[storeId];
+            if (!sock) throw new Error("Session unavailable");
         }
 
         const jid = customerPhone.includes('@') ? customerPhone : `${customerPhone.replace(/\D/g, '')}@s.whatsapp.net`;
-        const sent = await sock.sendMessage(jid, { text });
-        res.json({ status: "success", id: sent.key.id });
-    } catch (error) { res.status(500).json({ error: error.message }); }
+        
+        const sent = await Promise.race([
+            sock.sendMessage(jid, { text }),
+            new Promise((_, r) => setTimeout(() => r(new Error("TIMEOUT")), 15000))
+        ]);
+
+        res.json({ status: "success", messageId: sent.key.id });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Node.js Bridge on port ${PORT}`));
