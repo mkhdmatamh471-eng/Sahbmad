@@ -1,4 +1,4 @@
-const express = require('express');
+Const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const { 
@@ -191,7 +191,7 @@ function initWhatsApp(storeId, phoneNumber = null) {
                 for (const msg of m.messages) {
                     if (!msg.key.fromMe && msg.message) {
                         const remoteJid = msg.key.remoteJid;
-                        
+
                         // تنظيف الـ JID من كود الجهاز المعقد (مثل 967...@s.whatsapp.net:44)
                         // مع الاحتفاظ بالنطاق (@lid أو @s.whatsapp.net)
                         let senderJid = remoteJid;
@@ -242,10 +242,10 @@ app.post('/api/session/start', async (req, res) => {
 app.post('/api/message/send', async (req, res) => {
     try {
         const { storeId, customerPhone, text } = req.body;
-        
+
         // تحديد الـ JID الصحيح بذكاء
         let jid = String(customerPhone);
-        
+
         if (!jid.includes('@')) {
             // إذا لم يحتوي على '@' نقوم بتنظيفه وتوقع النطاق
             const cleanPhone = jid.replace(/\D/g, '');
