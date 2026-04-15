@@ -108,6 +108,7 @@ function initWhatsApp(storeId, phoneNumber = null) {
             const { state, saveCreds } = await usePostgresAuthState(storeId);
             const { version } = await fetchLatestBaileysVersion();
 
+            // 1. تحديث خيارات المقبس (Socket Config) لزيادة الاستقرار
             const sock = makeWASocket({
                 version,
                 auth: state,
@@ -116,8 +117,9 @@ function initWhatsApp(storeId, phoneNumber = null) {
                 printQRInTerminal: false,
                 syncFullHistory: false,
                 connectTimeoutMs: 60000,
-                // تسريع عملية إعادة المحاولة الداخلية في المكتبة
-                transactionOpts: { maxRetries: 5, delayBetweenRetriesMs: 1000 },
+                keepAliveIntervalMs: 30000, // إضافة الحفاظ على الاتصال نشطاً
+                // التعديل الأهم: منع التعليق عند إرسال طلبات الهوية
+                transactionOpts: { maxRetries: 5, delayBetweenRetriesMs: 2000 },
             });
 
             activeSessions[storeId] = sock;
@@ -139,6 +141,7 @@ function initWhatsApp(storeId, phoneNumber = null) {
 
             sock.ev.on("creds.update", saveCreds);
 
+            // 2. معالجة مطورة لحدث إغلاق الاتصال (Connection Close)
             sock.ev.on("connection.update", async (update) => {
                 const { connection, lastDisconnect, qr } = update;
 
@@ -148,20 +151,26 @@ function initWhatsApp(storeId, phoneNumber = null) {
 
                 if (connection === "close") {
                     const statusCode = (lastDisconnect?.error instanceof Boom)?.output?.statusCode;
+                    console.log(`[WA] ⚠️ انقطع الاتصال للمتجر ${storeId}، الكود: ${statusCode}`);
+
                     const isLoggedOut = statusCode === DisconnectReason.loggedOut || statusCode === 401;
 
+                    // تحديث عداد المحاولات للمتجر
                     if (!retryCount[storeId]) retryCount[storeId] = 0;
                     retryCount[storeId]++;
 
                     if (isLoggedOut || retryCount[storeId] > 3) {
+                        console.error(`[SESSION_DEAD] ❌ الجلسة انتهت نهائياً (Logout/MaxRetries). جاري الحذف...`);
                         delete activeSessions[storeId];
                         await pool.query("DELETE FROM whatsapp_sessions WHERE id LIKE $1", [`${storeId}_%`]);
                         reject(new Error("SESSION_TERMINATED"));
                     } else {
-                        setTimeout(() => initWhatsApp(storeId, phoneNumber).catch(() => {}), 10000);
+                        // إذا كان الخطأ بسبب "اتصال مغلق" (مثل 428)، انتظر قليلاً ثم أعد التشغيل
+                        const delay = statusCode === DisconnectReason.connectionClosed ? 5000 : 10000;
+                        console.log(`[RECONNECT] 🔄 محاولة إعادة الاتصال خلال ${delay/1000} ثوانٍ... (المحاولة ${retryCount[storeId]})`);
+                        setTimeout(() => initWhatsApp(storeId, phoneNumber).catch(() => {}), delay);
                     }
                 } 
-
                 else if (connection === "open") {
                     console.log(`[WA_READY] 🎉 متصل بنجاح: ${storeId}`);
 
@@ -180,41 +189,41 @@ function initWhatsApp(storeId, phoneNumber = null) {
                         }
                     }
 
-                    retryCount[storeId] = 0;
+                    retryCount[storeId] = 0; // تصفير العداد عند نجاح الاتصال
                     resolve({ status: "connected" });
                 }
             });
 
-            // 🌟 التعديل الأول: استقبال الرسائل وإرسال الـ JID كاملاً
+            // 3. تحصين استقبال الرسائل (Messages Upsert) بـ Try-Catch داخلي
             sock.ev.on("messages.upsert", async (m) => {
                 if (m.type !== "notify") return;
                 for (const msg of m.messages) {
-                    if (!msg.key.fromMe && msg.message) {
-                        const remoteJid = msg.key.remoteJid;
+                    try {
+                        if (!msg.key.fromMe && msg.message) {
+                            const remoteJid = msg.key.remoteJid;
 
-                        // تنظيف الـ JID من كود الجهاز المعقد (مثل 967...@s.whatsapp.net:44)
-                        // مع الاحتفاظ بالنطاق (@lid أو @s.whatsapp.net)
-                        let senderJid = remoteJid;
-                        if (remoteJid.includes('@')) {
-                            const [numberPart, domainPart] = remoteJid.split('@');
-                            const cleanNumber = numberPart.split(':')[0];
-                            senderJid = `${cleanNumber}@${domainPart}`;
-                        }
+                            // تنظيف الـ JID من كود الجهاز المعقد
+                            let senderJid = remoteJid;
+                            if (remoteJid.includes('@')) {
+                                const [numberPart, domainPart] = remoteJid.split('@');
+                                const cleanNumber = numberPart.split(':')[0];
+                                senderJid = `${cleanNumber}@${domainPart}`;
+                            }
 
-                        const text = msg.message.conversation || msg.message.extendedTextMessage?.text;
+                            const text = msg.message.conversation || msg.message.extendedTextMessage?.text;
 
-                        if (text) {
-                            console.log(`[INCOMING] ${storeId} <- ${senderJid}: ${text}`);
-                            try {
+                            if (text) {
+                                console.log(`[INCOMING] ${storeId} <- ${senderJid}: ${text}`);
                                 await axios.post(`${PYTHON_BACKEND_URL}/webhook/node-incoming`, {
                                     storeId: storeId,
-                                    customerPhone: senderJid, // الآن بايثون سيتلقى JID كامل وصحيح
+                                    customerPhone: senderJid, // إرسال الـ JID كامل
                                     message: text
-                                });
-                            } catch (err) {
-                                console.error(`[WEBHOOK_ERR] ❌ فشل الإرسال للبايثون`);
+                                }, { timeout: 10000 }); // مهلة لتجنب تعليق الطلب
                             }
                         }
+                    } catch (innerErr) {
+                        console.error(`[MSG_PROC_ERR] ⚠️ خطأ في معالجة رسالة مفردة:`, innerErr.message);
+                        // continue // تستمر الحلقة تلقائياً
                     }
                 }
             });
@@ -238,7 +247,6 @@ app.post('/api/session/start', async (req, res) => {
     } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
-// 🌟 التعديل الثاني والثالث: مسار الإرسال الذكي والمحمي من التعليق
 app.post('/api/message/send', async (req, res) => {
     try {
         const { storeId, customerPhone, text } = req.body;
