@@ -22,16 +22,17 @@ const PYTHON_BACKEND_URL = process.env.PYTHON_BACKEND_URL || "https://your-pytho
 const activeSessions = {};
 const retryCount = {};
 
+// إعداد قاعدة البيانات
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false },
-    max: 5,
+    max: 10, // تم الرفع قليلاً لاستيعاب الطلبات المتوازية
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 5000,
 });
 
 /**
- * دالة إدارة الجلسة من PostgreSQL
+ * إدارة الجلسة من PostgreSQL
  */
 async function usePostgresAuthState(sessionId) {
     const writeData = async (data, id) => {
@@ -89,15 +90,73 @@ async function usePostgresAuthState(sessionId) {
 }
 
 /**
+ * دالة تنظيف الجلسة (لمنع تسريب الذاكرة)
+ */
+function cleanupSession(storeId) {
+    if (activeSessions[storeId]) {
+        console.log(`[CLEANUP] 🧹 تنظيف الجلسة ومسح المستمعات للمتجر ${storeId}`);
+        try { 
+            activeSessions[storeId].ev.removeAllListeners(); 
+            activeSessions[storeId].end(); 
+        } catch (e) {}
+        delete activeSessions[storeId];
+    }
+}
+
+/**
+ * دالة معالجة الرسائل الواردة (تم فصلها لتنظيف الكود وتسريع الأداء)
+ */
+async function handleIncomingMessages(m, storeId) {
+    if (m.type !== "notify") return;
+
+    // تصفية الرسائل: تجاهل رسائلي، حالات الواتساب، والجروبات
+    const messagesToProcess = m.messages.filter(msg => {
+        const remoteJid = msg.key.remoteJid;
+        return !msg.key.fromMe && 
+               msg.message && 
+               remoteJid !== 'status@broadcast' && 
+               !remoteJid.endsWith('@g.us'); // تجاهل رسائل المجموعات
+    });
+
+    if (messagesToProcess.length === 0) return;
+
+    // معالجة جميع الرسائل الواردة بالتوازي (أطلق وانسى)
+    Promise.allSettled(messagesToProcess.map(async (msg) => {
+        try {
+            const remoteJid = msg.key.remoteJid;
+            
+            // تنظيف الـ JID
+            let senderJid = remoteJid;
+            if (remoteJid.includes('@')) {
+                const [numberPart, domainPart] = remoteJid.split('@');
+                const cleanNumber = numberPart.split(':')[0];
+                senderJid = `${cleanNumber}@${domainPart}`;
+            }
+
+            const text = msg.message.conversation || msg.message.extendedTextMessage?.text;
+
+            if (text) {
+                console.log(`[INCOMING] ${storeId} <- ${senderJid}: ${text}`);
+                await axios.post(`${PYTHON_BACKEND_URL}/webhook/node-incoming`, {
+                    storeId: storeId,
+                    customerPhone: senderJid,
+                    message: text
+                }, { timeout: 5000 }); // مهلة 5 ثوانٍ فقط لمنع التعليق
+            }
+        } catch (err) {
+            console.error(`[WEBHOOK_ERR] ⚠️ فشل الإرسال للبايثون للرسالة من ${msg.key.remoteJid}`);
+        }
+    }));
+}
+
+/**
  * المحرك الرئيسي (تأسيس الاتصال)
  */
 function initWhatsApp(storeId, phoneNumber = null) {
     return new Promise(async (resolve, reject) => {
         if (activeSessions[storeId]) {
             if (phoneNumber) {
-                console.log(`[CLEANUP] 🔄 إنهاء الجلسة القديمة للمتجر ${storeId} لطلب كود جديد...`);
-                try { activeSessions[storeId].end(); } catch (e) {}
-                delete activeSessions[storeId];
+                cleanupSession(storeId); // استخدام دالة التنظيف الآمنة
             } else {
                 return resolve({ status: "ALREADY_CONNECTED" });
             }
@@ -108,7 +167,6 @@ function initWhatsApp(storeId, phoneNumber = null) {
             const { state, saveCreds } = await usePostgresAuthState(storeId);
             const { version } = await fetchLatestBaileysVersion();
 
-            // 1. تحديث خيارات المقبس (Socket Config) لزيادة الاستقرار
             const sock = makeWASocket({
                 version,
                 auth: state,
@@ -117,14 +175,12 @@ function initWhatsApp(storeId, phoneNumber = null) {
                 printQRInTerminal: false,
                 syncFullHistory: false,
                 connectTimeoutMs: 60000,
-                keepAliveIntervalMs: 30000, // إضافة الحفاظ على الاتصال نشطاً
-                // التعديل الأهم: منع التعليق عند إرسال طلبات الهوية
+                keepAliveIntervalMs: 30000, 
                 transactionOpts: { maxRetries: 5, delayBetweenRetriesMs: 2000 },
             });
 
             activeSessions[storeId] = sock;
 
-            // طلب كود الربط
             if (!sock.authState.creds.registered && phoneNumber) {
                 console.log(`[PAIRING] 🔑 جاري طلب كود ربط للرقم: ${phoneNumber}`);
                 setTimeout(async () => {
@@ -133,7 +189,7 @@ function initWhatsApp(storeId, phoneNumber = null) {
                         const code = await sock.requestPairingCode(cleanNumber);
                         resolve({ status: "pairing_code", code: code });
                     } catch (err) {
-                        delete activeSessions[storeId];
+                        cleanupSession(storeId);
                         reject(new Error("FAILED_TO_GENERATE_PAIRING_CODE"));
                     }
                 }, 5000);
@@ -141,13 +197,10 @@ function initWhatsApp(storeId, phoneNumber = null) {
 
             sock.ev.on("creds.update", saveCreds);
 
-            // 2. معالجة مطورة لحدث إغلاق الاتصال (Connection Close)
             sock.ev.on("connection.update", async (update) => {
                 const { connection, lastDisconnect, qr } = update;
 
-                if (qr && !phoneNumber) {
-                    resolve({ status: "qr_code", qr: qr });
-                }
+                if (qr && !phoneNumber) resolve({ status: "qr_code", qr: qr });
 
                 if (connection === "close") {
                     const statusCode = (lastDisconnect?.error instanceof Boom)?.output?.statusCode;
@@ -155,31 +208,27 @@ function initWhatsApp(storeId, phoneNumber = null) {
 
                     const isLoggedOut = statusCode === DisconnectReason.loggedOut || statusCode === 401;
 
-                    // تحديث عداد المحاولات للمتجر
                     if (!retryCount[storeId]) retryCount[storeId] = 0;
                     retryCount[storeId]++;
 
                     if (isLoggedOut || retryCount[storeId] > 3) {
-                        console.error(`[SESSION_DEAD] ❌ الجلسة انتهت نهائياً (Logout/MaxRetries). جاري الحذف...`);
-                        delete activeSessions[storeId];
+                        console.error(`[SESSION_DEAD] ❌ الجلسة انتهت نهائياً. جاري الحذف...`);
+                        cleanupSession(storeId);
                         await pool.query("DELETE FROM whatsapp_sessions WHERE id LIKE $1", [`${storeId}_%`]);
                         reject(new Error("SESSION_TERMINATED"));
                     } else {
-                        // إذا كان الخطأ بسبب "اتصال مغلق" (مثل 428)، انتظر قليلاً ثم أعد التشغيل
                         const delay = statusCode === DisconnectReason.connectionClosed ? 5000 : 10000;
                         console.log(`[RECONNECT] 🔄 محاولة إعادة الاتصال خلال ${delay/1000} ثوانٍ... (المحاولة ${retryCount[storeId]})`);
+                        cleanupSession(storeId); // تنظيف قبل إعادة المحاولة
                         setTimeout(() => initWhatsApp(storeId, phoneNumber).catch(() => {}), delay);
                     }
                 } 
                 else if (connection === "open") {
                     console.log(`[WA_READY] 🎉 متصل بنجاح: ${storeId}`);
-
                     if (phoneNumber) {
                         try {
                             const myLid = sock.user.id.split(':')[0].split('@')[0];
                             const myRealPhone = phoneNumber.replace(/\D/g, '');
-
-                            console.log(`[MAPPING] 🔗 حفظ الربط: ${myRealPhone} <-> ${myLid}`);
                             await pool.query(
                                 "INSERT INTO phone_mappings (store_id, lid, real_phone) VALUES ($1, $2, $3) ON CONFLICT (lid) DO UPDATE SET real_phone = $3",
                                 [storeId, myLid, myRealPhone]
@@ -188,48 +237,16 @@ function initWhatsApp(storeId, phoneNumber = null) {
                             console.error(`[MAPPING_ERR] ❌ فشل حفظ الربط: ${err.message}`);
                         }
                     }
-
-                    retryCount[storeId] = 0; // تصفير العداد عند نجاح الاتصال
+                    retryCount[storeId] = 0; 
                     resolve({ status: "connected" });
                 }
             });
 
-            // 3. تحصين استقبال الرسائل (Messages Upsert) بـ Try-Catch داخلي
-            sock.ev.on("messages.upsert", async (m) => {
-                if (m.type !== "notify") return;
-                for (const msg of m.messages) {
-                    try {
-                        if (!msg.key.fromMe && msg.message) {
-                            const remoteJid = msg.key.remoteJid;
-
-                            // تنظيف الـ JID من كود الجهاز المعقد
-                            let senderJid = remoteJid;
-                            if (remoteJid.includes('@')) {
-                                const [numberPart, domainPart] = remoteJid.split('@');
-                                const cleanNumber = numberPart.split(':')[0];
-                                senderJid = `${cleanNumber}@${domainPart}`;
-                            }
-
-                            const text = msg.message.conversation || msg.message.extendedTextMessage?.text;
-
-                            if (text) {
-                                console.log(`[INCOMING] ${storeId} <- ${senderJid}: ${text}`);
-                                await axios.post(`${PYTHON_BACKEND_URL}/webhook/node-incoming`, {
-                                    storeId: storeId,
-                                    customerPhone: senderJid, // إرسال الـ JID كامل
-                                    message: text
-                                }, { timeout: 10000 }); // مهلة لتجنب تعليق الطلب
-                            }
-                        }
-                    } catch (innerErr) {
-                        console.error(`[MSG_PROC_ERR] ⚠️ خطأ في معالجة رسالة مفردة:`, innerErr.message);
-                        // continue // تستمر الحلقة تلقائياً
-                    }
-                }
-            });
+            // توجيه الرسائل إلى الدالة المفصولة الجديدة
+            sock.ev.on("messages.upsert", (m) => handleIncomingMessages(m, storeId));
 
         } catch (err) {
-            delete activeSessions[storeId];
+            cleanupSession(storeId);
             reject(err);
         }
     });
@@ -250,20 +267,14 @@ app.post('/api/session/start', async (req, res) => {
 app.post('/api/message/send', async (req, res) => {
     try {
         const { storeId, customerPhone, text } = req.body;
-
-        // تحديد الـ JID الصحيح بذكاء
         let jid = String(customerPhone);
 
         if (!jid.includes('@')) {
-            // إذا لم يحتوي على '@' نقوم بتنظيفه وتوقع النطاق
             const cleanPhone = jid.replace(/\D/g, '');
-            if (cleanPhone.length >= 15 || cleanPhone.startsWith('257')) {
-                jid = `${cleanPhone}@lid`;
-            } else {
-                jid = `${cleanPhone}@s.whatsapp.net`;
-            }
+            jid = (cleanPhone.length >= 15 || cleanPhone.startsWith('257')) 
+                ? `${cleanPhone}@lid` 
+                : `${cleanPhone}@s.whatsapp.net`;
         } else {
-            // إذا كان يحتوي على '@' (قادم من البايثون)، نتأكد فقط من إزالة كود الجهاز
             const [numPart, domainPart] = jid.split('@');
             jid = `${numPart.split(':')[0]}@${domainPart}`;
         }
@@ -280,11 +291,8 @@ app.post('/api/message/send', async (req, res) => {
 
         console.log(`[SENDING] 🚀 محاولة الإرسال الفعلي إلى: ${jid}`);
 
-        // استخدام Promise.race لمنع التعليق
         const sendMessagePromise = sock.sendMessage(jid, { text: text });
-        const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error("TIMEOUT")), 15000) // مهلة 15 ثانية
-        );
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("TIMEOUT")), 15000));
 
         const sentMsg = await Promise.race([sendMessagePromise, timeoutPromise]);
 
@@ -305,4 +313,4 @@ app.post('/api/message/send', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Node.js Bridge on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Node.js Bridge is running on port ${PORT}`));
