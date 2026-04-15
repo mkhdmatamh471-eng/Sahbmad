@@ -109,42 +109,32 @@ function cleanupSession(storeId) {
 async function handleIncomingMessages(m, storeId) {
     if (m.type !== "notify") return;
 
-    // تصفية الرسائل: تجاهل رسائلي، حالات الواتساب، والجروبات
     const messagesToProcess = m.messages.filter(msg => {
         const remoteJid = msg.key.remoteJid;
-        return !msg.key.fromMe && 
-               msg.message && 
-               remoteJid !== 'status@broadcast' && 
-               !remoteJid.endsWith('@g.us'); // تجاهل رسائل المجموعات
+        
+        // 1. استبعاد الحالات (Status/Stories) تماماً
+        if (remoteJid === 'status@broadcast') return false;
+
+        // 2. استبعاد رسائل المجموعات (إذا كنت لا تريد البوت أن يرد فيها)
+        if (remoteJid.endsWith('@g.us')) return false;
+
+        // 3. استبعاد رسائلك الشخصية التي ترسلها من الهاتف
+        if (msg.key.fromMe) return false;
+
+        // 4. التأكد من وجود محتوى نصي (لتجنب التعليق بسبب الوسائط أو الملصقات)
+        const hasText = !!(msg.message?.conversation || msg.message?.extendedTextMessage?.text);
+        
+        return hasText;
     });
 
     if (messagesToProcess.length === 0) return;
 
-    // معالجة جميع الرسائل الواردة بالتوازي (أطلق وانسى)
+    // معالجة الرسائل المتبقية (الدردشات الخاصة فقط)
     Promise.allSettled(messagesToProcess.map(async (msg) => {
         try {
-            const remoteJid = msg.key.remoteJid;
-            
-            // تنظيف الـ JID
-            let senderJid = remoteJid;
-            if (remoteJid.includes('@')) {
-                const [numberPart, domainPart] = remoteJid.split('@');
-                const cleanNumber = numberPart.split(':')[0];
-                senderJid = `${cleanNumber}@${domainPart}`;
-            }
-
-            const text = msg.message.conversation || msg.message.extendedTextMessage?.text;
-
-            if (text) {
-                console.log(`[INCOMING] ${storeId} <- ${senderJid}: ${text}`);
-                await axios.post(`${PYTHON_BACKEND_URL}/webhook/node-incoming`, {
-                    storeId: storeId,
-                    customerPhone: senderJid,
-                    message: text
-                }, { timeout: 5000 }); // مهلة 5 ثوانٍ فقط لمنع التعليق
-            }
+            // ... بقية كود الإرسال للبايثون كما هو
         } catch (err) {
-            console.error(`[WEBHOOK_ERR] ⚠️ فشل الإرسال للبايثون للرسالة من ${msg.key.remoteJid}`);
+            console.error(`[MSG_ERR]`, err);
         }
     }));
 }
