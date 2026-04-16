@@ -258,36 +258,42 @@ app.post('/api/session/start', async (req, res) => {
 
 app.post('/api/message/send', async (req, res) => {
     const { storeId, customerPhone, text } = req.body;
-    const sock = activeSessions[storeId];
+    let sock = activeSessions[storeId];
 
     if (!sock || !sock.user) {
-        initWhatsApp(storeId).catch(() => {});
         return res.status(503).json({ error: "Session offline" });
     }
 
     try {
         let jid;
-        
-        // إذا كان البايثون يرسل المعرف كاملاً (مثل 25791932973204@lid) نستخدمه كما هو
-        if (String(customerPhone).includes('@')) {
-            jid = customerPhone;
+        const phoneStr = String(customerPhone).trim();
+
+        // تحديد المعرف (JID)
+        if (phoneStr.includes('@')) {
+            jid = phoneStr;
         } else {
-            // إذا أرسل رقماً فقط، نطبق المنطق القديم مع تحسينه
-            const cleanPhone = String(customerPhone).replace(/\D/g, '');
-            // ملاحظة: أرقام بوروندي (257) وأرقام LID غالباً ما تسبب تضارب
-            // الأفضل دائماً في البايثون إرسال المعرف الذي جاء في الـ Webhook كما هو
-            jid = (cleanPhone.length >= 15 || cleanPhone.startsWith('257')) 
+            const cleanPhone = phoneStr.replace(/\D/g, '');
+            jid = (cleanPhone.startsWith('257') || cleanPhone.length >= 14) 
                 ? `${cleanPhone}@lid` 
                 : `${cleanPhone}@s.whatsapp.net`;
         }
 
-        console.log(`[SEND_ATTEMPT] 📤 محاولة إرسال إلى: ${jid} للمتجر: ${storeId}`);
+        // --- إضافة ميزة "جاري الكتابة" ---
+        // 1. إرسال حالة "جاري الكتابة"
+        await sock.sendPresenceUpdate('composing', jid);
+        
+        // 2. الانتظار لمدة (مثلاً 2-3 ثوانٍ) لمحاكاة الكتابة البشرية
+        const typingDuration = Math.min(Math.max(text.length * 50, 1500), 4000); // وقت متغير حسب طول النص
+        await new Promise(resolve => setTimeout(resolve, typingDuration));
 
+        // 3. إيقاف حالة "جاري الكتابة" (تلقائياً عند إرسال الرسالة)
         const sentMsg = await sock.sendMessage(jid, { text: text });
         
-        res.json({ status: "success", messageId: sentMsg.key.id, sentTo: jid });
+        console.log(`[SEND_SUCCESS] ✅ تم الإرسال للمتجر ${storeId} مع تأثير الكتابة`);
+        res.json({ status: "success", messageId: sentMsg.key.id });
+
     } catch (error) {
-        console.error(`[SEND_FAIL] ❌ المتجر: ${storeId}`, error.message);
+        console.error(`[SEND_FAIL] ❌ خطأ في المتجر ${storeId}:`, error.message);
         res.status(500).json({ error: error.message });
     }
 });
