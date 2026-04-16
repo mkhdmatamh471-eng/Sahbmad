@@ -260,26 +260,35 @@ app.post('/api/message/send', async (req, res) => {
     const { storeId, customerPhone, text } = req.body;
     const sock = activeSessions[storeId];
 
-    // 8. الفشل السريع (Fail Fast) إذا الجلسة غير جاهزة
     if (!sock || !sock.user) {
-        console.log(`[SEND_API] ⚠️ الجلسة غير متوفرة للمتجر ${storeId}، جاري الفتح في الخلفية...`);
         initWhatsApp(storeId).catch(() => {});
-        return res.status(503).json({ error: "Session is initializing or offline. Please retry later." });
+        return res.status(503).json({ error: "Session offline" });
     }
 
     try {
-        const cleanPhone = String(customerPhone).replace(/\D/g, '');
-        const jid = cleanPhone.length >= 15 ? `${cleanPhone}@lid` : `${cleanPhone}@s.whatsapp.net`;
+        let jid;
+        
+        // إذا كان البايثون يرسل المعرف كاملاً (مثل 25791932973204@lid) نستخدمه كما هو
+        if (String(customerPhone).includes('@')) {
+            jid = customerPhone;
+        } else {
+            // إذا أرسل رقماً فقط، نطبق المنطق القديم مع تحسينه
+            const cleanPhone = String(customerPhone).replace(/\D/g, '');
+            // ملاحظة: أرقام بوروندي (257) وأرقام LID غالباً ما تسبب تضارب
+            // الأفضل دائماً في البايثون إرسال المعرف الذي جاء في الـ Webhook كما هو
+            jid = (cleanPhone.length >= 15 || cleanPhone.startsWith('257')) 
+                ? `${cleanPhone}@lid` 
+                : `${cleanPhone}@s.whatsapp.net`;
+        }
 
-        const sendMessagePromise = sock.sendMessage(jid, { text: text });
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("TIMEOUT")), 15000));
+        console.log(`[SEND_ATTEMPT] 📤 محاولة إرسال إلى: ${jid} للمتجر: ${storeId}`);
 
-        const sentMsg = await Promise.race([sendMessagePromise, timeoutPromise]);
+        const sentMsg = await sock.sendMessage(jid, { text: text });
         
         res.json({ status: "success", messageId: sentMsg.key.id, sentTo: jid });
     } catch (error) {
         console.error(`[SEND_FAIL] ❌ المتجر: ${storeId}`, error.message);
-        res.status(error.message === "TIMEOUT" ? 504 : 500).json({ error: error.message });
+        res.status(500).json({ error: error.message });
     }
 });
 
