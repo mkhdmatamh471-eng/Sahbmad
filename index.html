@@ -217,9 +217,14 @@
 
 
     <script>
+    const SERVER_URL = "https://wadilni-1.onrender.com"; 
+
+    const db = new Dexie("DentalOS_DB");
+    db.version(1).stores({ patients: "id, FullName, Phone, isSynced" });
+  
         // 1. قاعدة البيانات المحلية
         const db = new Dexie("DentalOS_DB");
-        db.version(1).stores({ patients: "id, FullName, Phone, isSynced" });
+        
         let currentPatient = null;
 
         // 2. إدارة الواجهة والبحث
@@ -227,6 +232,100 @@
             const all = await db.patients.toArray();
             renderList(all.reverse());
         }
+        
+        
+
+    // 2. تعديل وظيفة المزامنة (Sync) لتشمل الرابط الكامل
+    async function syncNow() {
+        if (!navigator.onLine) return;
+        const unsynced = await db.patients.where('isSynced').equals(0).toArray();
+        if (unsynced.length === 0) return;
+        try {
+            const res = await fetch(`${SERVER_URL}/api/sync`, { // تم إضافة الرابط الكامل
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ patients: unsynced })
+            });
+            if (res.ok) {
+                for (let p of unsynced) { p.isSynced = 1; await db.patients.put(p); }
+                loadPatients();
+            }
+        } catch (e) { console.log("Sync Error"); }
+    }
+
+    // 3. تعديل وظيفة رفع الصور (Upload) لتشمل الرابط الكامل
+    async function uploadImage(input) {
+        if (!input.files[0]) return;
+        const formData = new FormData();
+        formData.append('photo', input.files[0]);
+
+        try {
+            // تم إضافة الرابط الكامل هنا
+            const res = await fetch(`${SERVER_URL}/api/upload/${currentPatient.id}`, { 
+                method: 'POST', 
+                body: formData 
+            });
+            const data = await res.json();
+            
+            if (!currentPatient.gallery) currentPatient.gallery = [];
+            currentPatient.gallery.push({ url: data.url, date: new Date().toLocaleDateString() });
+            currentPatient.isSynced = 0;
+            await db.patients.put(currentPatient);
+            renderGallery();
+        } catch (e) { alert("فشل الرفع للسيرفر"); }
+    }
+
+    // 4. وظيفة إرسال تذكير المواعيد (كاملة ومصلحة)
+    async function scheduleAppointment() {
+        const dateInput = document.getElementById('app-date').value;
+        if (!dateInput) return alert("⚠️ اختر تاريخ الموعد أولاً");
+
+        const dateFormatted = new Date(dateInput).toLocaleString('ar-YE', {
+            weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit'
+        });
+
+        const msg = `مرحباً ${currentPatient.FullName}،\nنود تذكيرك بموعدك القادم في عيادة د. محمد فهد\nبتاريخ: ${dateFormatted}\nدمت بصحة عافية.`;
+
+        if (navigator.onLine) {
+            try {
+                // استخدام الرابط الكامل للسيرفر
+                const res = await fetch(`${SERVER_URL}/api/send-reminder`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone: currentPatient.Phone, message: msg })
+                });
+
+                const data = await res.json();
+                if (data.success) alert("✅ تم إرسال رسالة الواتساب بنجاح");
+                else alert("❌ فشل الإرسال من السيرفر");
+            } catch (e) {
+                alert("📡 السيرفر غير مستجيب، تأكد من تشغيله");
+            }
+        } else {
+            alert("📶 لا يوجد إنترنت حالياً");
+        }
+    }
+
+    // 5. تعديل حذف المريض من السيرفر
+    async function deletePatient() {
+        if (!currentPatient) return;
+        const confirmDelete = confirm(`هل أنت متأكد من حذف ملف: ${currentPatient.FullName}؟`);
+        if (confirmDelete) {
+            try {
+                await db.patients.delete(currentPatient.id);
+                if (navigator.onLine) {
+                    // تم إضافة الرابط الكامل هنا
+                    fetch(`${SERVER_URL}/api/delete/${currentPatient.id}`, { method: 'DELETE' });
+                }
+                tab('dash');
+                loadPatients();
+            } catch (e) { alert("فشل الحذف"); }
+        }
+    }
+
+
+
+
 
         function renderList(list) {
             document.getElementById('p-list').innerHTML = list.map(p => `
