@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>DentalOS Pro | د. محمد فهد</title>
+    <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: system-ui, -apple-system, sans-serif; background-color: #f8fafc; }
+        .status-offline { background: #ef4444; }
+        .status-online { background: #10b981; }
+        .hidden { display: none; }
+        input:focus { ring: 2px; ring-color: #3b82f6; }
+        
+        @keyframes slideUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.page-active {
+    display: block !important;
+    animation: slideUp 0.3s ease-out forwards;
+}
+
+/* تأثير نبض بسيط للأزرار عند النقر */
+.nav-tap {
+    transition: transform 0.1s active;
+}
+.nav-tap:active {
+    transform: scale(0.9);
+}
+
+    </style>
+</head>
+<body class="flex flex-col h-screen overflow-hidden">
+
+    <div id="connection-status" class="text-[10px] text-white text-center py-1 font-bold transition-all status-offline">
+        تحقق من الاتصال...
+    </div>
+
+    <main class="flex-1 overflow-y-auto p-4 pb-24">
+        
+        <div id="tab-dash" class="max-w-md mx-auto space-y-4">
+            <div class="flex justify-between items-center">
+                <h1 class="text-2xl font-black text-slate-800">المرضى</h1>
+                <button onclick="syncNow()" class="text-xs bg-blue-100 text-blue-600 px-3 py-1 rounded-full font-bold">🔄 مزامنة</button>
+            </div>
+            <input type="text" id="searchBar" onkeyup="searchPts()" placeholder="بحث بالاسم أو الرقم..." class="w-full p-4 rounded-2xl border-none shadow-md outline-none text-sm">
+            <div id="p-list" class="space-y-3"></div>
+        </div>
+
+<div id="tab-stats" class="hidden max-w-md mx-auto space-y-6">
+    <h2 class="text-2xl font-black text-slate-800">التقارير المالية</h2>
+    
+    <div class="grid grid-cols-2 gap-4">
+        <div class="bg-blue-600 p-4 rounded-3xl text-white shadow-lg shadow-blue-200">
+            <p class="text-[10px] opacity-80">إجمالي الإيرادات</p>
+            <h3 id="stat-total-revenue" class="text-xl font-bold">0$</h3>
+        </div>
+        <div class="bg-emerald-500 p-4 rounded-3xl text-white shadow-lg shadow-emerald-200">
+            <p class="text-[10px] opacity-80">إجمالي المحصل</p>
+            <h3 id="stat-total-paid" class="text-xl font-bold">0$</h3>
+        </div>
+        <div class="bg-orange-500 p-4 rounded-3xl text-white shadow-lg shadow-orange-200">
+            <p class="text-[10px] opacity-80">ديون متبقية</p>
+            <h3 id="stat-total-debt" class="text-xl font-bold">0$</h3>
+        </div>
+        <div class="bg-purple-600 p-4 rounded-3xl text-white shadow-lg shadow-purple-200">
+            <p class="text-[10px] opacity-80">عدد المرضى</p>
+            <h3 id="stat-patients-count" class="text-xl font-bold">0</h3>
+        </div>
+    </div>
+
+    <div class="bg-white p-4 rounded-2xl shadow-sm flex gap-2">
+        <button onclick="calculateStats('today')" class="flex-1 py-2 text-[10px] font-bold bg-slate-100 rounded-xl hover:bg-blue-100 transition">اليوم</button>
+        <button onclick="calculateStats('month')" class="flex-1 py-2 text-[10px] font-bold bg-slate-100 rounded-xl hover:bg-blue-100 transition">هذا الشهر</button>
+        <button onclick="calculateStats('all')" class="flex-1 py-2 text-[10px] font-bold bg-blue-600 text-white rounded-xl">الكل</button>
+    </div>
+
+    <div class="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 space-y-4">
+        <h3 class="font-bold text-slate-700 text-sm">أكثر المرضى مديونية ⚠️</h3>
+        <div id="debtors-list" class="space-y-3">
+            </div>
+    </div>
+</div>
+
+        <div id="tab-pts" class="hidden max-w-md mx-auto space-y-4">
+            <div class="bg-white p-6 rounded-3xl shadow-lg space-y-4">
+                <h2 class="text-xl font-bold">ملف جديد</h2>
+                <input id="n" type="text" placeholder="اسم المريض بالكامل" class="w-full p-4 bg-slate-50 rounded-2xl border-none outline-none">
+                <input id="ph" type="tel" placeholder="رقم الهاتف (7XXXXXXXX)" class="w-full p-4 bg-slate-50 rounded-2xl border-none outline-none">
+                <button onclick="savePatient()" class="w-full bg-blue-600 text-white p-4 rounded-2xl font-bold shadow-lg">حفظ في الجهاز</button>
+            </div>
+        </div>
+
+        <div id="tab-profile" class="hidden max-w-md mx-auto space-y-4">
+            <button onclick="tab('dash')" class="text-blue-600 font-bold text-sm">← العودة للقائمة</button>
+            <div class="flex justify-between items-center mb-2">
+    <button onclick="tab('dash')" class="text-blue-600 font-bold text-sm">← العودة</button>
+    <button onclick="deletePatient()" class="bg-red-100 text-red-600 px-3 py-1 rounded-xl text-[10px] font-bold">🗑️ حذف الملف</button>
+</div>
+
+            <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+                <h2 id="prof-name" class="text-2xl font-black text-slate-800">--</h2>
+                <p id="prof-phone" class="text-slate-400 font-mono italic text-sm mb-4">--</p>
+                <div class="grid grid-cols-3 gap-2">
+                    <div class="bg-slate-50 p-2 rounded-xl text-center"><p class="text-[9px] text-slate-400">إجمالي</p><p id="f-total" class="font-bold text-sm text-slate-800">0</p></div>
+                    <div class="bg-green-50 p-2 rounded-xl text-center"><p class="text-[9px] text-green-400">مدفوع</p><p id="f-paid" class="font-bold text-sm text-green-600">0</p></div>
+                    <div class="bg-red-50 p-2 rounded-xl text-center"><p class="text-[9px] text-red-400">متبقي</p><p id="f-rem" class="font-bold text-sm text-red-600">0</p></div>
+                </div>
+            </div>
+
+            <div class="bg-blue-50 p-5 rounded-3xl border border-blue-100 space-y-3">
+                <h3 class="font-bold text-blue-800 text-sm">📅 الموعد القادم والتذكير</h3>
+                <input id="app-date" type="datetime-local" class="w-full p-3 rounded-xl border-none shadow-inner text-sm outline-none">
+                <button onclick="scheduleAppointment()" class="w-full bg-blue-600 text-white py-3 rounded-xl font-bold text-sm">حفظ وإرسال واتساب</button>
+            </div>
+<div class="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 space-y-4 mt-4">
+    <div class="flex justify-between items-center">
+        <h3 class="font-bold text-slate-700 text-sm">🦷 مخطط الأسنان (Odontogram)</h3>
+        <select id="tooth-view-type" onchange="renderOdontogram()" class="text-[10px] bg-slate-100 p-1 rounded-lg outline-none">
+            <option value="adult">بالغين (32)</option>
+            <option value="child">أطفال (20)</option>
+        </select>
+    </div>
+    
+    <div id="odontogram-container" class="grid grid-cols-8 gap-1 justify-items-center bg-slate-50 p-2 rounded-2xl">
+        </div>
+
+    <div id="tooth-control" class="hidden animate-pulse bg-blue-50 p-3 rounded-xl border border-blue-200">
+        <p class="text-[10px] font-bold text-blue-800 mb-2">تعديل السن رقم: <span id="selected-tooth-num">--</span></p>
+        <div class="grid grid-cols-2 gap-2">
+            <button onclick="setToothStatus('caries')" class="bg-red-500 text-white text-[10px] py-2 rounded-lg">🔴 تسوس</button>
+            <button onclick="setToothStatus('filling')" class="bg-green-500 text-white text-[10px] py-2 rounded-lg">🟢 حشو</button>
+            <button onclick="setToothStatus('missing')" class="bg-slate-400 text-white text-[10px] py-2 rounded-lg">⚪ مفقود</button>
+            <button onclick="setToothStatus('normal')" class="border border-slate-300 text-[10px] py-2 rounded-lg">🔵 طبيعي</button>
+        </div>
+    </div>
+</div>
+<div class="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 space-y-4 mt-4">
+    <div class="flex justify-between items-center">
+        <h3 class="font-bold text-slate-700 text-sm">📸 معرض الحالات والأشعة</h3>
+        <label class="bg-blue-600 text-white px-3 py-1 rounded-full text-[10px] font-bold cursor-pointer">
+            ➕ رفع صورة
+            <input type="file" id="img-upload" hidden onchange="uploadImage(this)">
+        </label>
+    </div>
+    
+    <div id="gallery-grid" class="grid grid-cols-3 gap-2">
+        </div>
+
+    <div id="compare-view" class="hidden fixed inset-0 bg-black bg-opacity-90 z-50 p-4 flex flex-col justify-center gap-4">
+        <button onclick="closeCompare()" class="text-white text-right font-bold">إغلاق ×</button>
+        <div class="flex gap-2 h-1/2">
+            <div id="slot-1" class="w-1/2 bg-slate-800 rounded-lg overflow-hidden border-2 border-dashed border-slate-600 flex items-center justify-center text-white text-[10px]">قبل</div>
+            <div id="slot-2" class="w-1/2 bg-slate-800 rounded-lg overflow-hidden border-2 border-dashed border-slate-600 flex items-center justify-center text-white text-[10px]">بعد</div>
+        </div>
+        <p class="text-white text-center text-[10px]">اضغط على الصور في المعرض لاختيارها للمقارنة</p>
+    </div>
+</div>
+
+            <div class="bg-white p-5 rounded-3xl shadow-sm space-y-4">
+                <h3 class="font-bold text-slate-700 text-sm">إضافة إجراء طبي</h3>
+                <input id="s-proc" placeholder="نوع الإجراء (مثلاً: تنظيف لثة)" class="w-full p-3 bg-slate-50 rounded-xl text-sm border-none">
+                <div class="flex gap-2">
+                    <input id="s-cost" type="number" placeholder="المبلغ" class="w-1/2 p-3 bg-slate-50 rounded-xl text-sm">
+                    <input id="s-paid" type="number" placeholder="الواصل" class="w-1/2 p-3 bg-slate-50 rounded-xl text-sm">
+                </div>
+                <button onclick="addSession()" class="w-full bg-slate-800 text-white py-3 rounded-xl font-bold text-sm">تحديث السجل</button>
+                <div id="sessions-list" class="space-y-2 mt-4"></div>
+            </div>
+        </div>
+    </main>
+
+<nav class="fixed bottom-0 left-0 right-0 bg-white border-t flex justify-around p-3 pb-6 shadow-2xl z-40">
+    <button id="nav-dash" onclick="tab('dash')" class="flex flex-col items-center gap-1 text-blue-600 transition-all">
+        <span class="text-xl">🏠</span><span class="text-[10px] font-bold">الرئيسية</span>
+    </button>
+    <button id="nav-stats" onclick="tab('stats'); calculateStats('all');" class="flex flex-col items-center gap-1 text-slate-400 transition-all">
+        <span class="text-xl">📊</span><span class="text-[10px] font-bold">التقارير</span>
+    </button>
+    <button id="nav-pts" onclick="tab('pts')" class="flex flex-col items-center gap-1 text-slate-400 transition-all">
+        <span class="text-xl">➕</span><span class="text-[10px] font-bold">إضافة</span>
+    </button>
+</nav>
+
+
+    <script>
+        // 1. قاعدة البيانات المحلية
+        const db = new Dexie("DentalOS_DB");
+        db.version(1).stores({ patients: "id, FullName, Phone, isSynced" });
+        let currentPatient = null;
+
+        // 2. إدارة الواجهة والبحث
+        async function loadPatients() {
+            const all = await db.patients.toArray();
+            renderList(all.reverse());
+        }
+
+        function renderList(list) {
+            document.getElementById('p-list').innerHTML = list.map(p => `
+                <div onclick="openProfile(${p.id})" class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex justify-between items-center active:scale-95 transition-transform">
+                    <div>
+                        <h3 class="font-bold text-slate-800 text-sm">${p.FullName}</h3>
+                        <p class="text-[10px] text-slate-400 font-mono">${p.Phone}</p>
+                    </div>
+                    <span>${p.isSynced ? '✅' : '⏳'}</span>
+                </div>`).join('');
+        }
+
+        function searchPts() {
+            const q = document.getElementById('searchBar').value.toLowerCase();
+            db.patients.toArray().then(all => {
+                const filtered = all.filter(p => p.FullName.toLowerCase().includes(q) || p.Phone.includes(q));
+                renderList(filtered.reverse());
+            });
+        }
+
+        // 3. العمليات الحيوية
+        async function savePatient() {
+    const name = document.getElementById('n').value.trim();
+    const phone = document.getElementById('ph').value.trim();
+
+    // 1. التحقق من الحقول الفارغة
+    if(!name || !phone) return alert("⚠️ يرجى إدخال الاسم ورقم الهاتف");
+
+    // 2. التحقق من صيغة الرقم اليمني (تبدأ بـ 7 وتتكون من 9 أرقام)
+    const phoneRegex = /^7[0-9]{8}$/;
+    if(!phoneRegex.test(phone)) {
+        return alert("❌ رقم الهاتف غير صحيح. يجب أن يبدأ بـ 7 ويتكون من 9 أرقام.");
+    }
+
+    // 3. التحقق من عدم تكرار المريض (بناءً على رقم الهاتف)
+    const exists = await db.patients.where('Phone').equals(phone).first();
+    if(exists) {
+        return alert(`🚫 هذا الرقم مسجل مسبقاً باسم: ${exists.FullName}`);
+    }
+    
+    const newPatient = {
+        id: Date.now(),
+        FullName: name,
+        Phone: phone,
+        Sessions: [],
+        Finance: { totalCost: 0, paid: 0 },
+        teethData: {}, // إضافة كائن مخطط الأسنان تلقائياً
+        gallery: [],   // إضافة كائن المعرض تلقائياً
+        isSynced: 0
+    };
+
+    try {
+        await db.patients.add(newPatient);
+        // إعادة ضبط الحقول وتنبيه المستخدم بنجاح
+        document.getElementById('n').value = '';
+        document.getElementById('ph').value = '';
+        alert("✅ تم إنشاء ملف المريض بنجاح");
+        tab('dash');
+        loadPatients();
+        if(navigator.onLine) syncNow();
+    } catch (e) {
+        alert("حدث خطأ أثناء الحفظ");
+    }
+}
+
+        async function openProfile(id) {
+    currentPatient = await db.patients.get(id);
+    
+    // تحديث البيانات في الصفحة قبل عرضها
+    document.getElementById('prof-name').innerText = currentPatient.FullName;
+    document.getElementById('prof-phone').innerText = currentPatient.Phone;
+    
+    updateFinanceUI();
+    renderSessions();
+    renderOdontogram();
+    renderGallery();
+    
+    // الانتقال لصفحة البروفايل
+    tab('profile');
+}
+
+        async function addSession() {
+            const proc = document.getElementById('s-proc').value;
+            const cost = parseFloat(document.getElementById('s-cost').value) || 0;
+            const paid = parseFloat(document.getElementById('s-paid').value) || 0;
+            if(!proc) return;
+
+            currentPatient.Sessions.push({ date: new Date().toLocaleDateString('ar-YE'), procedure: proc, cost, paid });
+            currentPatient.Finance.totalCost += cost;
+            currentPatient.Finance.paid += paid;
+            currentPatient.isSynced = 0;
+
+            await db.patients.put(currentPatient);
+            updateFinanceUI(); renderSessions(); syncNow();
+        }
+
+        // 4. نظام المواعيد والواتساب
+        async function scheduleAppointment() {
+            const dateInput = document.getElementById('app-date').value;
+            if (!dateInput) return alert("اختر تاريخ الموعد");
+
+            const dateFormatted = new Date(dateInput).toLocaleString('ar-YE', {
+                weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit'
+            });
+
+            const msg = `مرحباً ${currentPatient.FullName}،\nنود تذكيرك بموعدك القادم في عيادة د. محمد فهد\nبتاريخ: ${dateFormatted}\nدمت بصحة عافية.`;
+
+            if (navigator.onLine) {
+                try {
+                    const res = await fetch('/api/send-reminder', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ phone: currentPatient.Phone, message: msg })
+                    });
+                    if(res.ok) alert("تم الإرسال بنجاح ✅");
+                } catch (e) { alert("فشل الإرسال، تأكد من اتصال السيرفر"); }
+            } else {
+                alert("لا يوجد إنترنت، سيتم الحفظ محلياً فقط");
+            }
+        }
+
+        // 5. المزامنة والمالية
+        function updateFinanceUI() {
+            const total = currentPatient.Finance.totalCost;
+            const paid = currentPatient.Finance.paid;
+            document.getElementById('f-total').innerText = total + "$";
+            document.getElementById('f-paid').innerText = paid + "$";
+            document.getElementById('f-rem').innerText = (total - paid) + "$";
+        }
+
+        function renderSessions() {
+            document.getElementById('sessions-list').innerHTML = currentPatient.Sessions.map(s => `
+                <div class="bg-slate-50 p-3 rounded-xl text-xs flex justify-between border-r-4 border-blue-500">
+                    <div><p class="font-bold">${s.procedure}</p><p class="text-[9px] text-slate-400">${s.date}</p></div>
+                    <div class="text-left font-bold text-blue-600">${s.paid}$</div>
+                </div>`).reverse().join('');
+        }
+
+        async function syncNow() {
+            if (!navigator.onLine) return;
+            const unsynced = await db.patients.where('isSynced').equals(0).toArray();
+            if (unsynced.length === 0) return;
+            try {
+                const res = await fetch('/api/sync', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ patients: unsynced })
+                });
+                if (res.ok) {
+                    for (let p of unsynced) { p.isSynced = 1; await db.patients.put(p); }
+                    loadPatients();
+                }
+            } catch (e) { console.log("Sync Error"); }
+        }
+
+        function tab(t) {
+    const pages = ['dash', 'stats', 'pts', 'profile'];
+    
+    pages.forEach(p => {
+        const element = document.getElementById('tab-' + p);
+        if (element) {
+            // إخفاء الصفحة وإزالة كلاس الأنيميشن
+            element.classList.add('hidden');
+            element.classList.remove('page-active');
+        }
+    });
+
+    // إظهار الصفحة المستهدفة مع تفعيل الأنيميشن
+    const targetPage = document.getElementById('tab-' + t);
+    if (targetPage) {
+        targetPage.classList.remove('hidden');
+        // استخدام setTimeout بسيط لضمان إعادة تشغيل الأنيميشن
+        setTimeout(() => {
+            targetPage.classList.add('page-active');
+        }, 10);
+    }
+
+    // تحديث ألوان أيقونات التنقل السفلي
+    const navItems = ['dash', 'stats', 'pts'];
+    navItems.forEach(item => {
+        const navBtn = document.getElementById('nav-' + item);
+        if (navBtn) {
+            if (item === t) {
+                navBtn.classList.replace('text-slate-400', 'text-blue-600');
+                navBtn.querySelector('span:first-child').classList.add('scale-110');
+            } else {
+                navBtn.classList.replace('text-blue-600', 'text-slate-400');
+                navBtn.querySelector('span:first-child').classList.remove('scale-110');
+            }
+        }
+    });
+
+    document.querySelector('main').scrollTop = 0;
+}
+
+        function updateOnlineStatus() {
+            const status = document.getElementById('connection-status');
+            if (navigator.onLine) {
+                status.innerText = "متصل بالسحابة (المزامنة نشطة)";
+                status.className = "text-[10px] text-white text-center py-1 font-bold status-online";
+                syncNow();
+            } else {
+                status.innerText = "وضع الأوفلاين (يتم الحفظ في الهاتف)";
+                status.className = "text-[10px] text-white text-center py-1 font-bold status-offline";
+            }
+        }
+
+        window.addEventListener('online', updateOnlineStatus);
+        window.addEventListener('offline', updateOnlineStatus);
+        updateOnlineStatus(); loadPatients();
+        
+        let selectedTooth = null;
+let compareSlots = [null, null];
+
+// --- وظائف مخطط الأسنان ---
+function renderOdontogram() {
+    const container = document.getElementById('odontogram-container');
+    const view = document.getElementById('tooth-view-type').value;
+    const teethCount = view === 'adult' ? 32 : 20;
+    
+    // تهيئة بيانات الأسنان إذا لم تكن موجودة
+    if (!currentPatient.teethData) currentPatient.teethData = {};
+
+    container.innerHTML = '';
+    for (let i = 1; i <= teethCount; i++) {
+        const status = currentPatient.teethData[i] || 'normal';
+        const color = status === 'caries' ? 'bg-red-500' : status === 'filling' ? 'bg-green-500' : status === 'missing' ? 'bg-slate-200' : 'bg-blue-400';
+        
+        container.innerHTML += `
+            <div onclick="selectTooth(${i})" id="tooth-${i}" 
+                 class="w-8 h-10 ${color} rounded-b-lg border-2 border-white shadow-sm flex items-center justify-center text-[10px] text-white font-bold cursor-pointer transition-all active:scale-90">
+                ${i}
+            </div>`;
+    }
+}
+
+function selectTooth(num) {
+    selectedTooth = num;
+    document.getElementById('tooth-control').classList.remove('hidden');
+    document.getElementById('selected-tooth-num').innerText = num;
+}
+
+async function setToothStatus(status) {
+    if (!selectedTooth) return;
+    currentPatient.teethData[selectedTooth] = status;
+    currentPatient.isSynced = 0;
+    await db.patients.put(currentPatient);
+    renderOdontogram();
+    document.getElementById('tooth-control').classList.add('hidden');
+}
+
+// --- وظائف معرض الصور ---
+async function uploadImage(input) {
+    if (!input.files[0]) return;
+    const formData = new FormData();
+    formData.append('photo', input.files[0]);
+
+    try {
+        const res = await fetch(`/api/upload/${currentPatient.id}`, { method: 'POST', body: formData });
+        const data = await res.json();
+        
+        if (!currentPatient.gallery) currentPatient.gallery = [];
+        currentPatient.gallery.push({ url: data.url, date: new Date().toLocaleDateString() });
+        currentPatient.isSynced = 0;
+        await db.patients.put(currentPatient);
+        renderGallery();
+    } catch (e) { alert("فشل الرفع"); }
+}
+
+function renderGallery() {
+    const grid = document.getElementById('gallery-grid');
+    grid.innerHTML = (currentPatient.gallery || []).map((img, idx) => `
+        <div onclick="addToCompare('${img.url}')" class="relative aspect-square bg-slate-100 rounded-lg overflow-hidden border border-slate-200">
+            <img src="${img.url}" class="object-cover w-full h-full">
+            <span class="absolute bottom-0 right-0 bg-black bg-opacity-50 text-white text-[8px] px-1">${img.date}</span>
+        </div>
+    `).join('');
+}
+
+// --- وظائف المقارنة ---
+function addToCompare(url) {
+    document.getElementById('compare-view').classList.remove('hidden');
+    if (!compareSlots[0]) {
+        compareSlots[0] = url;
+        document.getElementById('slot-1').innerHTML = `<img src="${url}" class="w-full h-full object-cover">`;
+    } else {
+        compareSlots[1] = url;
+        document.getElementById('slot-2').innerHTML = `<img src="${url}" class="w-full h-full object-cover">`;
+    }
+}
+
+function closeCompare() {
+    compareSlots = [null, null];
+    document.getElementById('compare-view').classList.add('hidden');
+    document.getElementById('slot-1').innerHTML = 'قبل';
+    document.getElementById('slot-2').innerHTML = 'بعد';
+}
+
+async function calculateStats(range = 'all') {
+    const allPatients = await db.patients.toArray();
+    const today = new Date().toLocaleDateString('ar-YE');
+    const thisMonth = new Date().getMonth();
+    const thisYear = new Date().getFullYear();
+
+    let totalRevenue = 0;
+    let totalPaid = 0;
+    let debtors = [];
+
+    allPatients.forEach(p => {
+        let patientDebt = p.Finance.totalCost - p.Finance.paid;
+        
+        // حساب الإجمالي بناءً على النطاق الزمني
+        p.Sessions.forEach(s => {
+            const sDate = s.date; // التاريخ مخزن بصيغة LocaleDateString
+            
+            let include = false;
+            if (range === 'all') include = true;
+            else if (range === 'today' && sDate === today) include = true;
+            else if (range === 'month') {
+                // ملاحظة: المقارنة هنا تحتاج لدقة في التواريخ، سنعتمد البساطة حالياً
+                if(sDate.includes(today.split(' ')[1])) include = true; 
+            }
+
+            if (include) {
+                totalRevenue += (s.cost || 0);
+                totalPaid += (s.paid || 0);
+            }
+        });
+
+        if (patientDebt > 0) {
+            debtors.push({ name: p.FullName, debt: patientDebt, id: p.id });
+        }
+    });
+
+    // تحديث الأرقام في الواجهة
+    document.getElementById('stat-total-revenue').innerText = `${totalRevenue}$`;
+    document.getElementById('stat-total-paid').innerText = `${totalPaid}$`;
+    document.getElementById('stat-total-debt').innerText = `${totalRevenue - totalPaid}$`;
+    document.getElementById('stat-patients-count').innerText = allPatients.length;
+
+    // عرض قائمة الديون (ترتيب تنازلي حسب المبلغ)
+    debtors.sort((a, b) => b.debt - a.debt);
+    const listHtml = debtors.slice(0, 5).map(d => `
+        <div onclick="openProfile(${d.id})" class="flex justify-between items-center bg-red-50 p-3 rounded-2xl border border-red-100 active:scale-95 transition">
+            <span class="text-xs font-bold text-slate-700">${d.name}</span>
+            <span class="text-xs font-black text-red-600">${d.debt}$</span>
+        </div>
+    `).join('');
+    
+    document.getElementById('debtors-list').innerHTML = listHtml || '<p class="text-[10px] text-center text-slate-400">لا توجد ديون معلقة</p>';
+}
+
+async function deletePatient() {
+    if (!currentPatient) return;
+
+    // رسالة تأكيد مخصصة
+    const confirmDelete = confirm(`هل أنت متأكد من حذف ملف المريض: ${currentPatient.FullName}؟\nسيتم مسح جميع الجلسات والصور والبيانات المالية نهائياً!`);
+    
+    if (confirmDelete) {
+        try {
+            await db.patients.delete(currentPatient.id);
+            alert("🗑️ تم حذف السجل بنجاح");
+            
+            // العودة للرئيسية وتحديث القائمة
+            tab('dash');
+            loadPatients();
+            
+            // في حال كنت تريد الحذف من السيرفر أيضاً (اختياري)
+            if (navigator.onLine) {
+                fetch(`/api/delete/${currentPatient.id}`, { method: 'DELETE' });
+            }
+        } catch (e) {
+            alert("فشل عملية الحذف");
+        }
+    }
+}
+
+function renderList(list) {
+    document.getElementById('p-list').innerHTML = list.map((p, index) => `
+        <div onclick="openProfile(${p.id})" 
+             style="animation-delay: ${index * 50}ms"
+             class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex justify-between items-center active:scale-95 transition-all animate-[slideUp_0.3s_ease-out_forwards] opacity-0">
+            <div>
+                <h3 class="font-bold text-slate-800 text-sm">${p.FullName}</h3>
+                <p class="text-[10px] text-slate-400 font-mono">${p.Phone}</p>
+            </div>
+            <span class="text-xs">${p.isSynced ? '✅' : '⏳'}</span>
+        </div>`).join('');
+}
+
+
+    </script>
+</body>
+</html>
