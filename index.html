@@ -309,19 +309,36 @@
 }
 
         async function addSession() {
-            const proc = document.getElementById('s-proc').value;
-            const cost = parseFloat(document.getElementById('s-cost').value) || 0;
-            const paid = parseFloat(document.getElementById('s-paid').value) || 0;
-            if(!proc) return;
+    const proc = document.getElementById('s-proc').value;
+    const cost = parseFloat(document.getElementById('s-cost').value) || 0;
+    const paid = parseFloat(document.getElementById('s-paid').value) || 0;
+    
+    if(!proc) return alert("يرجى تحديد نوع الإجراء");
 
-            currentPatient.Sessions.push({ date: new Date().toLocaleDateString('ar-YE'), procedure: proc, cost, paid });
-            currentPatient.Finance.totalCost += cost;
-            currentPatient.Finance.paid += paid;
-            currentPatient.isSynced = 0;
+    currentPatient.Sessions.push({ 
+        date: new Date().toLocaleDateString('ar-YE'), 
+        procedure: proc, 
+        cost, 
+        paid 
+    });
+    
+    currentPatient.Finance.totalCost += cost;
+    currentPatient.Finance.paid += paid;
+    currentPatient.isSynced = 0;
 
-            await db.patients.put(currentPatient);
-            updateFinanceUI(); renderSessions(); syncNow();
-        }
+    await db.patients.put(currentPatient);
+    
+    // إعادة ضبط الحقول
+    document.getElementById('s-proc').value = '';
+    document.getElementById('s-proc-select').value = '';
+    document.getElementById('s-cost').value = '';
+    document.getElementById('s-paid').value = '';
+    
+    updateFinanceUI(); 
+    renderSessions(); 
+    if(navigator.onLine) syncNow();
+    alert("تم تحديث سجل المريض بنجاح ✅");
+}
 
         // 4. نظام المواعيد والواتساب
         async function scheduleAppointment() {
