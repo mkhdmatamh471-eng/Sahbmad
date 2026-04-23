@@ -342,28 +342,48 @@
 
         // 4. نظام المواعيد والواتساب
         async function scheduleAppointment() {
-            const dateInput = document.getElementById('app-date').value;
-            if (!dateInput) return alert("اختر تاريخ الموعد");
+    const dateInput = document.getElementById('app-date').value;
+    if (!dateInput) return alert("⚠️ اختر تاريخ الموعد أولاً");
 
-            const dateFormatted = new Date(dateInput).toLocaleString('ar-YE', {
-                weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit'
+    // تنسيق التاريخ ليكون مناسباً للمريض في اليمن
+    const dateFormatted = new Date(dateInput).toLocaleString('ar-YE', {
+        weekday: 'long', 
+        day: 'numeric', 
+        month: 'long', 
+        hour: '2-digit', 
+        minute: '2-digit'
+    });
+
+    const msg = `مرحباً ${currentPatient.FullName}،\nنود تذكيرك بموعدك القادم في عيادة د. محمد فهد\nبتاريخ: ${dateFormatted}\nدمت بصحة عافية.`;
+
+    // 🔴 الخطوة الأهم: تحديد رابط السيرفر الفعلي
+    const SERVER_URL = "https://alrahman-system.onrender.com"; 
+
+    if (navigator.onLine) {
+        try {
+            // إضافة الرابط الكامل قبل المسار
+            const res = await fetch(`${SERVER_URL}/api/send-reminder`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    phone: currentPatient.Phone, 
+                    message: msg 
+                })
             });
 
-            const msg = `مرحباً ${currentPatient.FullName}،\nنود تذكيرك بموعدك القادم في عيادة د. محمد فهد\nبتاريخ: ${dateFormatted}\nدمت بصحة عافية.`;
-
-            if (navigator.onLine) {
-                try {
-                    const res = await fetch('/api/send-reminder', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({ phone: currentPatient.Phone, message: msg })
-                    });
-                    if(res.ok) alert("تم الإرسال بنجاح ✅");
-                } catch (e) { alert("فشل الإرسال، تأكد من اتصال السيرفر"); }
+            const data = await res.json();
+            if (data.success) {
+                alert("✅ تم إرسال رسالة الواتساب بنجاح");
             } else {
-                alert("لا يوجد إنترنت، سيتم الحفظ محلياً فقط");
+                alert("❌ السيرفر متصل ولكن فشل الإرسال: " + data.error);
             }
+        } catch (e) {
+            alert("📡 فشل الاتصال بالسيرفر! تأكد أن السيرفر يعمل على Render.");
         }
+    } else {
+        alert("📶 لا يوجد إنترنت، تم حفظ الموعد في ذاكرة الهاتف فقط.");
+    }
+}
 
         // 5. المزامنة والمالية
         function updateFinanceUI() {
