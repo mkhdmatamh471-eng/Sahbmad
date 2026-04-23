@@ -160,17 +160,47 @@
     </div>
 </div>
 
-            <div class="bg-white p-5 rounded-3xl shadow-sm space-y-4">
-                <h3 class="font-bold text-slate-700 text-sm">إضافة إجراء طبي</h3>
-                <input id="s-proc" placeholder="نوع الإجراء (مثلاً: تنظيف لثة)" class="w-full p-3 bg-slate-50 rounded-xl text-sm border-none">
-                <div class="flex gap-2">
-                    <input id="s-cost" type="number" placeholder="المبلغ" class="w-1/2 p-3 bg-slate-50 rounded-xl text-sm">
-                    <input id="s-paid" type="number" placeholder="الواصل" class="w-1/2 p-3 bg-slate-50 rounded-xl text-sm">
-                </div>
-                <button onclick="addSession()" class="w-full bg-slate-800 text-white py-3 rounded-xl font-bold text-sm">تحديث السجل</button>
-                <div id="sessions-list" class="space-y-2 mt-4"></div>
+            <div class="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 space-y-4">
+    <h3 class="font-bold text-slate-700 text-sm flex items-center gap-2">
+        <span>💉</span> إضافة إجراء أو دفعة مالية
+    </h3>
+    
+    <div class="space-y-3">
+        <select id="s-proc-select" onchange="document.getElementById('s-proc').value = this.value" class="w-full p-3 bg-slate-50 rounded-xl text-xs border-none outline-none text-slate-600">
+            <option value="">اختيار إجراء سريع...</option>
+            <option value="كشف ومعاينة">🔍 كشف ومعاينة</option>
+            <option value="حشو ضوئي">🦷 حشو ضوئي</option>
+            <option value="سحب عصب">🧬 سحب عصب</option>
+            <option value="قلع سن">🦷 قلع سن</option>
+            <option value="تنظيف وجير">✨ تنظيف وتلميع</option>
+            <option value="تركيب زيركون">👑 تركيب زيركون</option>
+            <option value="دفعة مالية فقط">💰 دفعة مالية فقط</option>
+        </select>
+
+        <input id="s-proc" placeholder="أو اكتب الإجراء يدوياً..." class="w-full p-3 bg-slate-50 rounded-xl text-sm border-none focus:ring-2 focus:ring-blue-500 transition-all">
+        
+        <div class="grid grid-cols-2 gap-3">
+            <div class="space-y-1">
+                <label class="text-[10px] text-slate-400 mr-2">مبلغ العلاج ($)</label>
+                <input id="s-cost" type="number" placeholder="0.00" class="w-full p-3 bg-slate-50 rounded-xl text-sm font-bold text-blue-600">
+            </div>
+            <div class="space-y-1">
+                <label class="text-[10px] text-slate-400 mr-2">المبلغ المدفوع ($)</label>
+                <input id="s-paid" type="number" placeholder="0.00" class="w-full p-3 bg-emerald-50 rounded-xl text-sm font-bold text-emerald-600 border border-emerald-100">
             </div>
         </div>
+        
+        <button onclick="addSession()" class="w-full bg-slate-800 text-white py-4 rounded-2xl font-bold text-sm shadow-lg active:scale-95 transition-transform">
+            تحديث السجل المالي والطبي 📥
+        </button>
+    </div>
+
+    <div class="mt-6">
+        <h4 class="text-[11px] font-bold text-slate-400 mb-3 uppercase tracking-wider">السجل التاريخي للجلسات</h4>
+        <div id="sessions-list" class="space-y-3"></div>
+    </div>
+</div>
+
     </main>
 
 <nav class="fixed bottom-0 left-0 right-0 bg-white border-t flex justify-around p-3 pb-6 shadow-2xl z-40">
@@ -328,12 +358,47 @@
         }
 
         function renderSessions() {
-            document.getElementById('sessions-list').innerHTML = currentPatient.Sessions.map(s => `
-                <div class="bg-slate-50 p-3 rounded-xl text-xs flex justify-between border-r-4 border-blue-500">
-                    <div><p class="font-bold">${s.procedure}</p><p class="text-[9px] text-slate-400">${s.date}</p></div>
-                    <div class="text-left font-bold text-blue-600">${s.paid}$</div>
-                </div>`).reverse().join('');
-        }
+    const list = document.getElementById('sessions-list');
+    if (!currentPatient.Sessions || currentPatient.Sessions.length === 0) {
+        list.innerHTML = '<p class="text-[10px] text-center text-slate-400 py-4">لا توجد سجلات سابقة</p>';
+        return;
+    }
+
+    list.innerHTML = currentPatient.Sessions.map((s, idx) => {
+        const debt = (s.cost || 0) - (s.paid || 0);
+        return `
+            <div class="bg-white border border-slate-100 rounded-2xl p-3 shadow-sm hover:shadow-md transition-shadow">
+                <div class="flex justify-between items-start mb-2">
+                    <div class="flex items-center gap-2">
+                        <div class="w-2 h-2 rounded-full ${debt > 0 ? 'bg-orange-400' : 'bg-emerald-400'}"></div>
+                        <span class="font-bold text-slate-800 text-xs">${s.procedure}</span>
+                    </div>
+                    <span class="text-[9px] text-slate-400 font-mono">${s.date}</span>
+                </div>
+                
+                <div class="grid grid-cols-3 gap-1 mt-2 pt-2 border-t border-slate-50">
+                    <div class="text-center">
+                        <p class="text-[8px] text-slate-400 uppercase">التكلفة</p>
+                        <p class="font-bold text-[11px] text-slate-700">${s.cost}$</p>
+                    </div>
+                    <div class="text-center">
+                        <p class="text-[8px] text-slate-400 uppercase">المدفوع</p>
+                        <p class="font-bold text-[11px] text-emerald-600">${s.paid}$</p>
+                    </div>
+                    <div class="text-center bg-slate-50 rounded-lg py-1">
+                        <p class="text-[8px] text-slate-400 uppercase">المتبقي</p>
+                        <p class="font-bold text-[11px] ${debt > 0 ? 'text-red-500' : 'text-slate-400'}">${debt}$</p>
+                    </div>
+                </div>
+                
+                <div class="flex justify-end mt-2">
+                     <button onclick="deleteSession(${idx})" class="text-[9px] text-red-300 hover:text-red-500">حذف السجل ×</button>
+                </div>
+            </div>
+        `;
+    }).reverse().join('');
+}
+
 
         async function syncNow() {
             if (!navigator.onLine) return;
@@ -587,6 +652,24 @@ function renderList(list) {
         </div>`).join('');
 }
 
+
+async function deleteSession(index) {
+    if (!confirm("هل تريد حذف هذا السجل المالي؟ سيتم تحديث إجمالي الحساب.")) return;
+    
+    // عكس العملية المالية
+    const session = currentPatient.Sessions[index];
+    currentPatient.Finance.totalCost -= (session.cost || 0);
+    currentPatient.Finance.paid -= (session.paid || 0);
+    
+    // إزالة الجلسة من المصفوفة
+    currentPatient.Sessions.splice(index, 1);
+    currentPatient.isSynced = 0;
+
+    await db.patients.put(currentPatient);
+    updateFinanceUI();
+    renderSessions();
+    if(navigator.onLine) syncNow();
+}
 
     </script>
 </body>
