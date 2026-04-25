@@ -31,6 +31,37 @@
     transform: scale(0.9);
 }
 
+/* زر المساعد الصوتي العائم */
+.voice-fab {
+    position: fixed;
+    bottom: 100px;
+    left: 20px;
+    width: 60px;
+    height: 60px;
+    background: #ef4444;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);
+    z-index: 100;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.voice-fab.listening {
+    background: #10b981;
+    animation: pulse-green 1.5s infinite;
+    transform: scale(1.1);
+}
+
+@keyframes pulse-green {
+    0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+    70% { box-shadow: 0 0 0 15px rgba(16, 185, 129, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
     </style>
 </head>
 <body class="flex flex-col h-screen overflow-hidden">
@@ -811,6 +842,97 @@ if ('serviceWorker' in navigator) {
     .then(() => console.log("✅ واجهة العيادة جاهزة للعمل بدون إنترنت"));
 }
 
+// --- محرك المساعد الصوتي (Smart Voice Assistant) ---
+let recognition;
+let isListening = false;
+
+if ('webkitSpeechRecognition' in window) {
+    recognition = new webkitSpeechRecognition();
+    recognition.continuous = false; // يتوقف بعد كل جملة
+    recognition.interimResults = false;
+    recognition.lang = 'ar-SA'; // يدعم اللهجات العربية
+
+    recognition.onstart = () => {
+        isListening = true;
+        document.getElementById('voice-btn').classList.add('listening');
+        document.getElementById('voice-icon').innerText = '⏳';
+    };
+
+    recognition.onend = () => {
+        isListening = false;
+        document.getElementById('voice-btn').classList.remove('listening');
+        document.getElementById('voice-icon').innerText = '🎙️';
+    };
+
+    recognition.onresult = (event) => {
+        const text = event.results[0][0].transcript.toLowerCase();
+        processVoiceCommand(text);
+    };
+}
+
+function toggleVoice() {
+    if (isListening) recognition.stop();
+    else recognition.start();
+}
+
+function processVoiceCommand(cmd) {
+    console.log("تم سماع:", cmd);
+    
+    // قاموس الكلمات المفتاحية وربطها بالـ IDs الخاصة بالخانات
+    const mapping = {
+        "الاسم": "n",
+        "اسم": "n",
+        "رقم": "ph",
+        "هاتف": "ph",
+        "تلفون": "ph",
+        "إجراء": "s-proc",
+        "عملية": "s-proc",
+        "نوع": "s-proc",
+        "تكلفة": "s-cost",
+        "مبلغ": "s-cost",
+        "حساب": "s-cost",
+        "مدفوع": "s-paid",
+        "دفع": "s-paid"
+    };
+
+    let matched = false;
+
+    for (let key in mapping) {
+        if (cmd.includes(key)) {
+            const inputId = mapping[key];
+            const inputElement = document.getElementById(inputId);
+            
+            if (inputElement) {
+                // استخراج القيمة بعد الكلمة المفتاحية (مثلاً: "الاسم محمد فهد" -> "محمد فهد")
+                let value = cmd.split(key)[1].trim();
+                
+                // تنظيف الأرقام (تحويل الأرقام العربية الهندية إلى أرقام عادية)
+                if (inputId === 'ph' || inputId === 's-cost' || inputId === 's-paid') {
+                    value = value.replace(/[٠١٢٣٤٥٦٧٨٩]/g, d => d.charCodeAt(0) - 1632);
+                    value = value.replace(/\s/g, ''); // إزالة المسافات في الأرقام
+                }
+
+                inputElement.value = value;
+                inputElement.classList.add('ring-2', 'ring-green-500'); // تمييز الحقل الذي تم تعبئته
+                setTimeout(() => inputElement.classList.remove('ring-2', 'ring-green-500'), 2000);
+                
+                matched = true;
+                break;
+            }
+        }
+    }
+
+    if (!matched) {
+        alert("لم أتعرف على الخانة. جرب قول: 'الاسم...' أو 'التكلفة...'");
+    }
+}
+
+
     </script>
+    
+    <div id="voice-btn" class="voice-fab" onclick="toggleVoice()">
+    <span id="voice-icon" style="font-size: 24px;">🎙️</span>
+</div>
+
 </body>
 </html>
