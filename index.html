@@ -1,994 +1,1180 @@
 <!DOCTYPE html>
-<html dir="rtl" lang="ar">
+<html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>DentalOS Pro | د. محمد فهد</title>
-    <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مركز الخالد الطبي | عيادة عرماء لطب وجراحة الفم والأسنان والمختبر الطبي</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer">
+
     <style>
-        body { font-family: system-ui, -apple-system, sans-serif; background-color: #f8fafc; }
-        .status-offline { background: #ef4444; }
-        .status-online { background: #10b981; }
-        .hidden { display: none; }
-        input:focus { ring: 2px; ring-color: #3b82f6; }
-        
-        @keyframes slideUp {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
-}
+        /* ===== RESET & BASE ===== */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        html { scroll-behavior: smooth; }
+        body {
+            font-family: 'Cairo', 'Tajawal', sans-serif;
+            color: #1e293b;
+            background: #fff;
+            line-height: 1.8;
+            overflow-x: hidden;
+        }
+        a { text-decoration: none; color: inherit; }
+        img { max-width: 100%; height: auto; display: block; }
+        ul { list-style: none; }
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 24px;
+        }
 
-.page-active {
-    display: block !important;
-    animation: slideUp 0.3s ease-out forwards;
-}
+        /* ===== CSS VARIABLES ===== */
+        :root {
+            --primary: #0056b3;
+            --primary-dark: #003d7a;
+            --primary-light: #e8f0fe;
+            --primary-glow: rgba(0,86,179,.12);
+            --teal: #0d9488;
+            --teal-light: #e4f5f4;
+            --teal-dark: #0f766e;
+            --mint: #e0f7fa;
+            --white: #ffffff;
+            --gray-50: #f8fafc;
+            --gray-100: #f1f5f9;
+            --gray-200: #e2e8f0;
+            --gray-300: #cbd5e1;
+            --gray-500: #64748b;
+            --gray-600: #475569;
+            --gray-700: #334155;
+            --gray-800: #1e293b;
+            --whatsapp: #25d366;
+            --shadow-sm: 0 1px 3px rgba(0,0,0,.07);
+            --shadow-md: 0 6px 24px rgba(0,0,0,.09);
+            --shadow-lg: 0 12px 48px rgba(0,0,0,.11);
+            --radius: 14px;
+            --radius-sm: 8px;
+            --transition: .3s cubic-bezier(.4,0,.2,1);
+        }
 
-/* تأثير نبض بسيط للأزرار عند النقر */
-.nav-tap {
-    transition: transform 0.1s active;
-}
-.nav-tap:active {
-    transform: scale(0.9);
-}
+        /* ===== TYPOGRAPHY ===== */
+        .section { padding: 90px 0; }
+        .section-title {
+            font-size: clamp(1.6rem, 3.5vw, 2.2rem);
+            font-weight: 800;
+            color: var(--primary-dark);
+            text-align: center;
+            margin-bottom: 14px;
+            position: relative;
+        }
+        .section-title::after {
+            content: '';
+            display: block;
+            width: 60px;
+            height: 3px;
+            background: var(--primary);
+            border-radius: 3px;
+            margin: 12px auto 0;
+        }
+        .section-subtitle {
+            font-size: 1.05rem;
+            color: var(--gray-500);
+            text-align: center;
+            max-width: 620px;
+            margin: 0 auto 50px;
+            line-height: 1.7;
+        }
 
+        /* ===== STICKY NAVBAR ===== */
+        .navbar {
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            background: var(--white);
+            box-shadow: var(--shadow-sm);
+        }
+        .navbar .container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 74px;
+        }
+        .navbar .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1.25rem;
+            font-weight: 800;
+            color: var(--primary);
+        }
+        .navbar .logo i { font-size: 1.5rem; color: var(--teal); }
+        .navbar .logo span { font-weight: 300; color: var(--gray-500); font-size: .7rem; display: block; margin-top: -2px; }
+
+        .nav-links { display: flex; align-items: center; gap: 6px; }
+        .nav-links a {
+            font-weight: 600;
+            font-size: .9rem;
+            color: var(--gray-700);
+            padding: 6px 14px;
+            border-radius: 50px;
+            transition: background var(--transition), color var(--transition);
+        }
+        .nav-links a:hover,
+        .nav-links a.active { background: var(--primary-light); color: var(--primary); }
+
+        .hamburger {
+            display: none;
+            flex-direction: column;
+            gap: 5px;
+            cursor: pointer;
+            background: none;
+            border: none;
+            padding: 4px;
+        }
+        .hamburger span {
+            width: 26px;
+            height: 3px;
+            background: var(--primary);
+            border-radius: 3px;
+            transition: var(--transition);
+        }
+
+        /* ===== HERO ===== */
+        .hero {
+            position: relative;
+            min-height: calc(100vh - 74px);
+            display: flex;
+            align-items: center;
+            overflow: hidden;
+            background: linear-gradient(160deg, var(--primary-light) 0%, var(--mint) 45%, #fff 100%);
+        }
+        .hero-overlay {
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(ellipse 600px 400px at 80% 20%, rgba(0,86,179,.08) 0%, transparent 70%),
+                radial-gradient(ellipse 500px 500px at 20% 80%, rgba(13,148,136,.06) 0%, transparent 70%);
+            pointer-events: none;
+        }
+        .hero .container {
+            position: relative;
+            z-index: 2;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 50px;
+            align-items: center;
+        }
+        .hero-content h1 {
+            font-size: clamp(2rem, 5vw, 3.2rem);
+            font-weight: 900;
+            color: var(--primary-dark);
+            line-height: 1.2;
+            margin-bottom: 6px;
+        }
+        .hero-content h1 span { color: var(--teal); }
+        .hero-content .tagline {
+            font-size: clamp(1rem, 2vw, 1.25rem);
+            font-weight: 600;
+            color: var(--gray-700);
+            margin-bottom: 12px;
+        }
+        .hero-content p {
+            font-size: .98rem;
+            color: var(--gray-500);
+            max-width: 480px;
+            margin-bottom: 28px;
+        }
+        .hero-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px 24px;
+            margin-bottom: 32px;
+        }
+        .hero-badges span {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+            font-size: .9rem;
+            color: var(--gray-700);
+        }
+        .hero-badges span i { color: var(--teal); font-size: 1rem; }
+
+        .hero-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 13px 32px;
+            border-radius: 50px;
+            font-size: 1rem;
+            font-weight: 700;
+            border: none;
+            cursor: pointer;
+            transition: background var(--transition), transform var(--transition), box-shadow var(--transition);
+        }
+        .btn-primary {
+            background: var(--primary);
+            color: var(--white);
+            box-shadow: 0 6px 20px rgba(0,86,179,.30);
+        }
+        .btn-primary:hover {
+            background: var(--primary-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0,86,179,.35);
+        }
+        .btn-outline {
+            background: transparent;
+            color: var(--primary);
+            border: 2px solid var(--primary);
+        }
+        .btn-outline:hover {
+            background: var(--primary);
+            color: var(--white);
+            transform: translateY(-2px);
+        }
+        .btn-teal {
+            background: var(--teal);
+            color: var(--white);
+            box-shadow: 0 6px 20px rgba(13,148,136,.30);
+        }
+        .btn-teal:hover {
+            background: var(--teal-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(13,148,136,.35);
+        }
+
+        .hero-visual {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .hero-cards {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            width: 100%;
+            max-width: 420px;
+        }
+        .hero-card {
+            background: var(--white);
+            border-radius: var(--radius);
+            padding: 26px 18px;
+            text-align: center;
+            box-shadow: var(--shadow-md);
+            transition: transform var(--transition), box-shadow var(--transition);
+        }
+        .hero-card:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--shadow-lg);
+        }
+        .hero-card .icon-circle {
+            width: 54px;
+            height: 54px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 12px;
+            font-size: 1.5rem;
+        }
+        .hero-card .icon-circle.blue { background: var(--primary-light); color: var(--primary); }
+        .hero-card .icon-circle.teal { background: var(--teal-light); color: var(--teal); }
+        .hero-card span { display: block; font-weight: 700; font-size: .9rem; color: var(--gray-700); }
+        .hero-card small {
+            display: block;
+            font-size: .78rem;
+            color: var(--gray-500);
+            margin-top: 4px;
+            font-weight: 500;
+        }
+
+        /* ===== ABOUT ===== */
+        .about {
+            background: var(--white);
+        }
+        .about-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 50px;
+            align-items: center;
+        }
+        .about-text p {
+            font-size: 1.05rem;
+            color: var(--gray-600);
+            line-height: 1.9;
+            margin-bottom: 24px;
+        }
+        .about-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+        }
+        .about-stat {
+            text-align: center;
+            background: var(--gray-50);
+            border-radius: var(--radius);
+            padding: 24px 12px;
+            border: 1px solid var(--gray-100);
+        }
+        .about-stat .num {
+            font-size: 2rem;
+            font-weight: 800;
+            color: var(--primary);
+        }
+        .about-stat .label {
+            font-size: .85rem;
+            color: var(--gray-500);
+            font-weight: 600;
+            margin-top: 4px;
+        }
+        .about-image {
+            display: flex;
+            justify-content: center;
+        }
+        .about-image .icon-mosaic {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+            max-width: 360px;
+        }
+        .about-image .icon-mosaic .tile {
+            background: var(--primary-light);
+            border-radius: var(--radius);
+            padding: 28px 16px;
+            text-align: center;
+            transition: transform var(--transition);
+        }
+        .about-image .icon-mosaic .tile:nth-child(2) { background: var(--teal-light); }
+        .about-image .icon-mosaic .tile:nth-child(3) { background: var(--teal-light); }
+        .about-image .icon-mosaic .tile:nth-child(4) { background: var(--primary-light); }
+        .about-image .icon-mosaic .tile:hover { transform: scale(1.04); }
+        .about-image .icon-mosaic .tile i { font-size: 2.4rem; color: var(--primary); }
+        .about-image .icon-mosaic .tile:nth-child(2) i,
+        .about-image .icon-mosaic .tile:nth-child(3) i { color: var(--teal); }
+        .about-image .icon-mosaic .tile span {
+            display: block;
+            font-weight: 600;
+            font-size: .82rem;
+            color: var(--gray-700);
+            margin-top: 8px;
+        }
+
+        /* ===== DEPARTMENTS ===== */
+        .departments {
+            background: var(--gray-50);
+        }
+        .dept-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
+        .dept-card {
+            background: var(--white);
+            border-radius: var(--radius);
+            overflow: hidden;
+            box-shadow: var(--shadow-sm);
+            transition: transform var(--transition), box-shadow var(--transition);
+        }
+        .dept-card:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--shadow-lg);
+        }
+        .dept-header {
+            padding: 30px 28px 20px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .dept-header .dept-icon {
+            width: 58px;
+            height: 58px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.6rem;
+            flex-shrink: 0;
+        }
+        .dept-header .dept-icon.dental { background: var(--primary-light); color: var(--primary); }
+        .dept-header .dept-icon.lab { background: var(--teal-light); color: var(--teal); }
+        .dept-header h3 {
+            font-size: 1.15rem;
+            font-weight: 800;
+            color: var(--gray-800);
+        }
+        .dept-header h3 small {
+            display: block;
+            font-weight: 500;
+            font-size: .8rem;
+            color: var(--gray-500);
+            margin-top: 2px;
+        }
+        .dept-body { padding: 0 28px 28px; }
+        .dept-body ul { display: flex; flex-direction: column; gap: 12px; }
+        .dept-body ul li {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: .95rem;
+            color: var(--gray-600);
+            font-weight: 500;
+            padding: 10px 14px;
+            border-radius: var(--radius-sm);
+            transition: background var(--transition);
+        }
+        .dept-body ul li:hover { background: var(--gray-50); }
+        .dept-body ul li i {
+            font-size: 1rem;
+            width: 20px;
+            text-align: center;
+        }
+        .dept-body ul li .fa-check-circle { color: var(--teal); }
+        .dept-card.dental .dept-body ul li .fa-check-circle { color: var(--primary); }
+        .dept-card.lab .dept-body ul li .fa-check-circle { color: var(--teal); }
+
+        /* Department Subsections */
+        .dept-subsection {
+            margin-bottom: 18px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--gray-100);
+        }
+        .dept-subsection:last-child {
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+        .dept-subtitle {
+            font-size: .95rem;
+            font-weight: 800;
+            color: var(--primary-dark);
+            margin-bottom: 8px;
+            padding: 0 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .dept-subtitle i { font-size: 1rem; }
+        .dept-card.dental .dept-subtitle i { color: var(--primary); }
+        .dept-card.lab .dept-subtitle i { color: var(--teal); }
+        .dept-subsection ul { gap: 6px !important; }
+
+        /* ===== WORKING HOURS ===== */
+        .hours {
+            background: var(--white);
+        }
+        .hours-card {
+            max-width: 580px;
+            margin: 0 auto;
+            background: var(--white);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-md);
+            overflow: hidden;
+            border: 1px solid var(--gray-100);
+        }
+        .hours-card .hours-header {
+            background: var(--primary);
+            color: var(--white);
+            text-align: center;
+            padding: 22px 20px;
+        }
+        .hours-card .hours-header i { font-size: 1.8rem; margin-bottom: 6px; }
+        .hours-card .hours-header h3 { font-size: 1.2rem; font-weight: 700; }
+        .hours-table { width: 100%; border-collapse: collapse; }
+        .hours-table tr:not(:last-child) { border-bottom: 1px solid var(--gray-100); }
+        .hours-table td {
+            padding: 18px 24px;
+            font-size: .95rem;
+            color: var(--gray-700);
+            font-weight: 500;
+        }
+        .hours-table td:first-child {
+            font-weight: 700;
+            color: var(--gray-800);
+            width: 40%;
+            background: var(--gray-50);
+        }
+        .hours-table td i { margin-left: 8px; color: var(--primary); }
+        .hours-note {
+            text-align: center;
+            padding: 16px;
+            background: var(--primary-light);
+            color: var(--primary);
+            font-weight: 600;
+            font-size: .9rem;
+        }
+
+        /* ===== CONTACT ===== */
+        .contact {
+            background: var(--gray-50);
+        }
+        .contact-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            align-items: start;
+        }
+        .contact-info { display: flex; flex-direction: column; gap: 20px; }
+        .contact-info .info-item {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            background: var(--white);
+            padding: 18px 22px;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--gray-100);
+        }
+        .contact-info .info-item i {
+            width: 46px;
+            height: 46px;
+            border-radius: 50%;
+            background: var(--primary-light);
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            flex-shrink: 0;
+        }
+        .contact-info .info-item .info-text strong { display: block; font-size: .85rem; color: var(--gray-800); }
+        .contact-info .info-item .info-text span { font-size: .95rem; color: var(--gray-500); }
+
+        .contact-map {
+            border-radius: var(--radius);
+            overflow: hidden;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--gray-100);
+        }
+        .contact-map iframe { width: 100%; height: 220px; border: 0; display: block; }
+
+        /* Booking Form */
+        .booking-form {
+            background: var(--white);
+            border-radius: var(--radius);
+            padding: 32px;
+            box-shadow: var(--shadow-md);
+            border: 1px solid var(--gray-100);
+        }
+        .booking-form h3 {
+            font-size: 1.2rem;
+            font-weight: 800;
+            color: var(--primary-dark);
+            margin-bottom: 22px;
+            text-align: center;
+        }
+        .form-group { margin-bottom: 18px; }
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            font-size: .88rem;
+            color: var(--gray-700);
+            margin-bottom: 6px;
+        }
+        .form-group label i { margin-left: 6px; color: var(--primary); }
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid var(--gray-200);
+            border-radius: var(--radius-sm);
+            font-family: inherit;
+            font-size: .95rem;
+            color: var(--gray-800);
+            transition: border-color var(--transition);
+            background: var(--white);
+        }
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+        .btn-submit {
+            width: 100%;
+            padding: 14px;
+            background: var(--primary);
+            color: var(--white);
+            border: none;
+            border-radius: var(--radius-sm);
+            font-family: inherit;
+            font-size: 1.05rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background var(--transition), transform var(--transition);
+        }
+        .btn-submit:hover {
+            background: var(--primary-dark);
+            transform: translateY(-1px);
+        }
+
+        /* ===== FLOATING WHATSAPP ===== */
+        .whatsapp-float {
+            position: fixed;
+            bottom: 24px;
+            left: 24px;
+            z-index: 999;
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: var(--whatsapp);
+            color: var(--white);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.6rem;
+            box-shadow: 0 4px 20px rgba(37,211,102,.35);
+            transition: transform var(--transition), box-shadow var(--transition);
+        }
+        .whatsapp-float:hover {
+            transform: scale(1.08);
+            box-shadow: 0 6px 28px rgba(37,211,102,.45);
+        }
+        .whatsapp-float .pulse {
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            background: var(--whatsapp);
+            opacity: .4;
+            animation: pulse-ring 2s infinite;
+        }
+        @keyframes pulse-ring {
+            0%   { transform: scale(1); opacity: .4; }
+            100% { transform: scale(1.45); opacity: 0; }
+        }
+
+        /* ===== FOOTER ===== */
+        .footer {
+            background: var(--primary-dark);
+            color: rgba(255,255,255,.8);
+            text-align: center;
+            padding: 32px 20px;
+            font-size: .9rem;
+        }
+        .footer a { color: var(--mint); }
+        .footer a:hover { text-decoration: underline; }
+        .footer .social-links {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+            margin-bottom: 14px;
+        }
+        .footer .social-links a {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: rgba(255,255,255,.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--white);
+            transition: background var(--transition);
+        }
+        .footer .social-links a:hover { background: var(--primary); text-decoration: none; }
+
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 992px) {
+            .hero .container {
+                grid-template-columns: 1fr;
+                text-align: center;
+                gap: 40px;
+            }
+            .hero-content p { margin: 0 auto 24px; }
+            .hero-badges { justify-content: center; }
+            .hero-buttons { justify-content: center; }
+            .hero-visual .hero-cards { max-width: 340px; }
+
+            .about-grid { grid-template-columns: 1fr; gap: 40px; }
+
+            .dept-grid { grid-template-columns: 1fr; }
+
+            .contact-grid { grid-template-columns: 1fr; }
+        }
+
+        @media (max-width: 768px) {
+            .nav-links {
+                position: fixed;
+                top: 74px;
+                right: -100%;
+                width: 260px;
+                height: calc(100vh - 74px);
+                background: var(--white);
+                flex-direction: column;
+                padding: 32px 20px;
+                gap: 4px;
+                box-shadow: -4px 0 24px rgba(0,0,0,.08);
+                transition: right var(--transition);
+            }
+            .nav-links.open { right: 0; }
+            .nav-links a { padding: 10px 16px; font-size: .95rem; width: 100%; border-radius: var(--radius-sm); }
+            .hamburger { display: flex; }
+            .hamburger.open span:nth-child(1) { transform: rotate(45deg) translate(5px, 6px); }
+            .hamburger.open span:nth-child(2) { opacity: 0; }
+            .hamburger.open span:nth-child(3) { transform: rotate(-45deg) translate(5px, -6px); }
+
+            .hero { min-height: auto; padding: 60px 0; }
+
+            .section { padding: 60px 0; }
+
+            .about-stats { grid-template-columns: repeat(3, 1fr); gap: 10px; }
+            .about-stat { padding: 18px 8px; }
+            .about-stat .num { font-size: 1.5rem; }
+            .about-stat .label { font-size: .75rem; }
+        }
+
+        @media (max-width: 480px) {
+            .container { padding: 0 16px; }
+
+            .hero-cards { grid-template-columns: 1fr 1fr; gap: 10px; }
+            .hero-card { padding: 20px 12px; }
+            .hero-card .icon-circle { width: 44px; height: 44px; font-size: 1.2rem; }
+            .hero-buttons .btn { width: 100%; justify-content: center; }
+
+            .about-stats { grid-template-columns: repeat(3, 1fr); }
+            .about-image .icon-mosaic { max-width: 280px; }
+            .about-image .icon-mosaic .tile { padding: 20px 12px; }
+            .about-image .icon-mosaic .tile i { font-size: 1.8rem; }
+
+            .dept-header { flex-direction: column; text-align: center; }
+            .dept-header h3 small { display: inline; }
+
+            .hours-table td { padding: 14px 16px; font-size: .85rem; }
+
+            .booking-form { padding: 22px 18px; }
+        }
     </style>
 </head>
-<body class="flex flex-col h-screen overflow-hidden">
+<body>
 
-    <div id="connection-status" class="text-[10px] text-white text-center py-1 font-bold transition-all status-offline">
-        تحقق من الاتصال...
-    </div>
-
-    <main class="flex-1 overflow-y-auto p-4 pb-24">
-        
-        <div id="tab-dash" class="max-w-md mx-auto space-y-4">
-            <div class="flex justify-between items-center">
-                <h1 class="text-2xl font-black text-slate-800">المرضى</h1>
-                <button onclick="syncNow()" class="text-xs bg-blue-100 text-blue-600 px-3 py-1 rounded-full font-bold">🔄 مزامنة</button>
-            </div>
-            <input type="text" id="searchBar" onkeyup="searchPts()" placeholder="بحث بالاسم أو الرقم..." class="w-full p-4 rounded-2xl border-none shadow-md outline-none text-sm">
-            <div id="p-list" class="space-y-3"></div>
+    <!-- ===== STICKY NAVBAR ===== -->
+    <nav class="navbar">
+        <div class="container">
+            <a href="#" class="logo">
+                <i class="fas fa-tooth"></i>
+                <div>مركز الخالد الطبي <span>عيادة عرماء لطب الأسنان</span></div>
+            </a>
+            <ul class="nav-links" id="navLinks">
+                <li><a href="#hero" class="active">الرئيسية</a></li>
+                <li><a href="#about">من نحن</a></li>
+                <li><a href="#departments">عيادة الأسنان</a></li>
+                <li><a href="#departments">المختبر</a></li>
+                <li><a href="#hours">أوقات الدوام</a></li>
+                <li><a href="#contact">تواصل معنا</a></li>
+            </ul>
+            <button class="hamburger" id="hamburger" aria-label="القائمة">
+                <span></span><span></span><span></span>
+            </button>
         </div>
+    </nav>
 
-<div class="max-w-md mx-auto mb-4">
-    <button onclick="startVoiceEntry()" class="w-full bg-slate-900 text-white p-4 rounded-3xl flex items-center justify-center gap-3 shadow-xl active:scale-95 transition-all">
-        <div id="recording-indicator" class="hidden w-3 h-3 bg-red-500 rounded-full animate-ping"></div>
-        <span id="voice-status" class="font-bold">🎙️ تدوين ذكي سريع (Groq)</span>
-    </button>
-</div>
-
-
-
-<div id="live-transcript" class="text-center text-blue-600 text-xs mt-2 min-h-[20px] font-medium italic"></div>
-
-
-
-<div id="tab-stats" class="hidden max-w-md mx-auto space-y-6">
-    <h2 class="text-2xl font-black text-slate-800">التقارير المالية</h2>
-    
-    <div class="grid grid-cols-2 gap-4">
-        <div class="bg-blue-600 p-4 rounded-3xl text-white shadow-lg shadow-blue-200">
-            <p class="text-[10px] opacity-80">إجمالي الإيرادات</p>
-            <h3 id="stat-total-revenue" class="text-xl font-bold">0$</h3>
-        </div>
-        <div class="bg-emerald-500 p-4 rounded-3xl text-white shadow-lg shadow-emerald-200">
-            <p class="text-[10px] opacity-80">إجمالي المحصل</p>
-            <h3 id="stat-total-paid" class="text-xl font-bold">0$</h3>
-        </div>
-        <div class="bg-orange-500 p-4 rounded-3xl text-white shadow-lg shadow-orange-200">
-            <p class="text-[10px] opacity-80">ديون متبقية</p>
-            <h3 id="stat-total-debt" class="text-xl font-bold">0$</h3>
-        </div>
-        <div class="bg-purple-600 p-4 rounded-3xl text-white shadow-lg shadow-purple-200">
-            <p class="text-[10px] opacity-80">عدد المرضى</p>
-            <h3 id="stat-patients-count" class="text-xl font-bold">0</h3>
-        </div>
-    </div>
-
-    <div class="bg-white p-4 rounded-2xl shadow-sm flex gap-2">
-        <button onclick="calculateStats('today')" class="flex-1 py-2 text-[10px] font-bold bg-slate-100 rounded-xl hover:bg-blue-100 transition">اليوم</button>
-        <button onclick="calculateStats('month')" class="flex-1 py-2 text-[10px] font-bold bg-slate-100 rounded-xl hover:bg-blue-100 transition">هذا الشهر</button>
-        <button onclick="calculateStats('all')" class="flex-1 py-2 text-[10px] font-bold bg-blue-600 text-white rounded-xl">الكل</button>
-    </div>
-
-    <div class="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 space-y-4">
-        <h3 class="font-bold text-slate-700 text-sm">أكثر المرضى مديونية ⚠️</h3>
-        <div id="debtors-list" class="space-y-3">
-            </div>
-    </div>
-</div>
-
-        <div id="tab-pts" class="hidden max-w-md mx-auto space-y-4">
-            <div class="bg-white p-6 rounded-3xl shadow-lg space-y-4">
-                <h2 class="text-xl font-bold">ملف جديد</h2>
-                <input id="n" type="text" placeholder="اسم المريض بالكامل" class="w-full p-4 bg-slate-50 rounded-2xl border-none outline-none">
-                <input id="ph" type="tel" placeholder="رقم الهاتف (7XXXXXXXX)" class="w-full p-4 bg-slate-50 rounded-2xl border-none outline-none">
-                <button onclick="savePatient()" class="w-full bg-blue-600 text-white p-4 rounded-2xl font-bold shadow-lg">حفظ في الجهاز</button>
-            </div>
-        </div>
-
-        <div id="tab-profile" class="hidden max-w-md mx-auto space-y-4">
-            <button onclick="tab('dash')" class="text-blue-600 font-bold text-sm">← العودة للقائمة</button>
-            <div class="flex justify-between items-center mb-2">
-    <button onclick="tab('dash')" class="text-blue-600 font-bold text-sm">← العودة</button>
-    <button onclick="deletePatient()" class="bg-red-100 text-red-600 px-3 py-1 rounded-xl text-[10px] font-bold">🗑️ حذف الملف</button>
-</div>
-
-            <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-                <h2 id="prof-name" class="text-2xl font-black text-slate-800">--</h2>
-                <p id="prof-phone" class="text-slate-400 font-mono italic text-sm mb-4">--</p>
-                <div class="grid grid-cols-3 gap-2">
-                    <div class="bg-slate-50 p-2 rounded-xl text-center"><p class="text-[9px] text-slate-400">إجمالي</p><p id="f-total" class="font-bold text-sm text-slate-800">0</p></div>
-                    <div class="bg-green-50 p-2 rounded-xl text-center"><p class="text-[9px] text-green-400">مدفوع</p><p id="f-paid" class="font-bold text-sm text-green-600">0</p></div>
-                    <div class="bg-red-50 p-2 rounded-xl text-center"><p class="text-[9px] text-red-400">متبقي</p><p id="f-rem" class="font-bold text-sm text-red-600">0</p></div>
+    <!-- ===== HERO ===== -->
+    <section class="hero" id="hero">
+        <div class="hero-overlay"></div>
+        <div class="container">
+            <div class="hero-content">
+                <h1>مركز <span>الخالد</span> الطبي</h1>
+                <p class="tagline">رعاية تبتسم لها الحياة! 🦷</p>
+                <p style="font-weight:600;color:var(--primary);font-size:1.05rem;margin-bottom:6px;">عيادة عرماء لطب وجراحة الفم والأسنان</p>
+                <p style="font-size:.9rem;color:var(--gray-500);margin-bottom:14px;">تحت إشراف الدكتور محمد فهد الرميمه</p>
+                <p>رعاية صحية متكاملة.. عيادة أسنان ومختبرات طبية حديثة تحت سقف واحد، بمعايير عالمية وكوادر متخصصة.</p>
+                <div class="hero-badges">
+                    <span><i class="fas fa-user-md"></i> د. محمد فهد الرميمه</span>
+                    <span><i class="fas fa-flask"></i> مختبر متطور</span>
+                    <span><i class="fas fa-shield-alt"></i> تعقيم كامل</span>
+                    <span><i class="fas fa-clock"></i> مواعيد مرنة</span>
+                </div>
+                <div class="hero-buttons">
+                    <a href="#contact" class="btn btn-primary"><i class="fas fa-calendar-check"></i> احجز موعد في العيادة</a>
+                    <a href="#contact" class="btn btn-outline"><i class="fas fa-microscope"></i> استفسر عن الفحوصات</a>
                 </div>
             </div>
-
-            <div class="bg-blue-50 p-5 rounded-3xl border border-blue-100 space-y-3">
-                <h3 class="font-bold text-blue-800 text-sm">📅 الموعد القادم والتذكير</h3>
-                <input id="app-date" type="datetime-local" class="w-full p-3 rounded-xl border-none shadow-inner text-sm outline-none">
-                <button onclick="scheduleAppointment()" class="w-full bg-blue-600 text-white py-3 rounded-xl font-bold text-sm">حفظ وإرسال واتساب</button>
-            </div>
-<div class="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 space-y-4 mt-4">
-    <div class="flex justify-between items-center">
-        <h3 class="font-bold text-slate-700 text-sm">🦷 مخطط الأسنان (Odontogram)</h3>
-        <select id="tooth-view-type" onchange="renderOdontogram()" class="text-[10px] bg-slate-100 p-1 rounded-lg outline-none">
-            <option value="adult">بالغين (32)</option>
-            <option value="child">أطفال (20)</option>
-        </select>
-    </div>
-    
-    <div id="odontogram-container" class="grid grid-cols-8 gap-1 justify-items-center bg-slate-50 p-2 rounded-2xl">
-        </div>
-
-    <div id="tooth-control" class="hidden animate-pulse bg-blue-50 p-3 rounded-xl border border-blue-200">
-        <p class="text-[10px] font-bold text-blue-800 mb-2">تعديل السن رقم: <span id="selected-tooth-num">--</span></p>
-        <div class="grid grid-cols-2 gap-2">
-            <button onclick="setToothStatus('caries')" class="bg-red-500 text-white text-[10px] py-2 rounded-lg">🔴 تسوس</button>
-            <button onclick="setToothStatus('filling')" class="bg-green-500 text-white text-[10px] py-2 rounded-lg">🟢 حشو</button>
-            <button onclick="setToothStatus('missing')" class="bg-slate-400 text-white text-[10px] py-2 rounded-lg">⚪ مفقود</button>
-            <button onclick="setToothStatus('normal')" class="border border-slate-300 text-[10px] py-2 rounded-lg">🔵 طبيعي</button>
-        </div>
-    </div>
-</div>
-<div class="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 space-y-4 mt-4">
-    <div class="flex justify-between items-center">
-        <h3 class="font-bold text-slate-700 text-sm">📸 معرض الحالات والأشعة</h3>
-        <label class="bg-blue-600 text-white px-3 py-1 rounded-full text-[10px] font-bold cursor-pointer">
-            ➕ رفع صورة
-            <input type="file" id="img-upload" hidden onchange="uploadImage(this)">
-        </label>
-    </div>
-    
-    <div id="gallery-grid" class="grid grid-cols-3 gap-2">
-        </div>
-
-    <div id="compare-view" class="hidden fixed inset-0 bg-black bg-opacity-90 z-50 p-4 flex flex-col justify-center gap-4">
-        <button onclick="closeCompare()" class="text-white text-right font-bold">إغلاق ×</button>
-        <div class="flex gap-2 h-1/2">
-            <div id="slot-1" class="w-1/2 bg-slate-800 rounded-lg overflow-hidden border-2 border-dashed border-slate-600 flex items-center justify-center text-white text-[10px]">قبل</div>
-            <div id="slot-2" class="w-1/2 bg-slate-800 rounded-lg overflow-hidden border-2 border-dashed border-slate-600 flex items-center justify-center text-white text-[10px]">بعد</div>
-        </div>
-        <p class="text-white text-center text-[10px]">اضغط على الصور في المعرض لاختيارها للمقارنة</p>
-    </div>
-</div>
-
-            <div class="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 space-y-4">
-    <h3 class="font-bold text-slate-700 text-sm flex items-center gap-2">
-        <span>💉</span> إضافة إجراء أو دفعة مالية
-    </h3>
-    
-    <div class="space-y-3">
-        <select id="s-proc-select" onchange="document.getElementById('s-proc').value = this.value" class="w-full p-3 bg-slate-50 rounded-xl text-xs border-none outline-none text-slate-600">
-            <option value="">اختيار إجراء سريع...</option>
-            <option value="كشف ومعاينة">🔍 كشف ومعاينة</option>
-            <option value="حشو ضوئي">🦷 حشو ضوئي</option>
-            <option value="سحب عصب">🧬 سحب عصب</option>
-            <option value="قلع سن">🦷 قلع سن</option>
-            <option value="تنظيف وجير">✨ تنظيف وتلميع</option>
-            <option value="تركيب زيركون">👑 تركيب زيركون</option>
-            <option value="دفعة مالية فقط">💰 دفعة مالية فقط</option>
-        </select>
-
-        <input id="s-proc" placeholder="أو اكتب الإجراء يدوياً..." class="w-full p-3 bg-slate-50 rounded-xl text-sm border-none focus:ring-2 focus:ring-blue-500 transition-all">
-        
-        <div class="grid grid-cols-2 gap-3">
-            <div class="space-y-1">
-                <label class="text-[10px] text-slate-400 mr-2">مبلغ العلاج ($)</label>
-                <input id="s-cost" type="number" placeholder="0.00" class="w-full p-3 bg-slate-50 rounded-xl text-sm font-bold text-blue-600">
-            </div>
-            <div class="space-y-1">
-                <label class="text-[10px] text-slate-400 mr-2">المبلغ المدفوع ($)</label>
-                <input id="s-paid" type="number" placeholder="0.00" class="w-full p-3 bg-emerald-50 rounded-xl text-sm font-bold text-emerald-600 border border-emerald-100">
+            <div class="hero-visual">
+                <div class="hero-cards">
+                    <div class="hero-card">
+                        <div class="icon-circle blue"><i class="fas fa-tooth"></i></div>
+                        <span>عيادة الأسنان</span>
+                        <small>زراعة · تقويم · تجميل</small>
+                    </div>
+                    <div class="hero-card">
+                        <div class="icon-circle teal"><i class="fas fa-microscope"></i></div>
+                        <span>المختبر الطبي</span>
+                        <small>تحاليل · هرمونات · ميكروبيولوجي</small>
+                    </div>
+                    <div class="hero-card">
+                        <div class="icon-circle teal"><i class="fas fa-x-ray"></i></div>
+                        <span>الأشعة الرقمية</span>
+                        <small>تشخيص دقيق وفوري</small>
+                    </div>
+                    <div class="hero-card">
+                        <div class="icon-circle blue"><i class="fas fa-smile"></i></div>
+                        <span>تبييض الأسنان</span>
+                        <small>بأحدث الأجهزة</small>
+                    </div>
+                </div>
             </div>
         </div>
-        
-        <button onclick="addSession()" class="w-full bg-slate-800 text-white py-4 rounded-2xl font-bold text-sm shadow-lg active:scale-95 transition-transform">
-            تحديث السجل المالي والطبي 📥
-        </button>
-    </div>
+    </section>
 
-    <div class="mt-6">
-        <h4 class="text-[11px] font-bold text-slate-400 mb-3 uppercase tracking-wider">السجل التاريخي للجلسات</h4>
-        <div id="sessions-list" class="space-y-3"></div>
-    </div>
-</div>
+    <!-- ===== ABOUT US ===== -->
+    <section class="section about" id="about">
+        <div class="container">
+            <h2 class="section-title">من نحن</h2>
+            <p class="section-subtitle">عيادة عرماء لطب وجراحة الفم والأسنان — .</p>
+            <div class="about-grid">
+                <div class="about-text">
+                    <p>مركز الخالد الطبي يضم <strong>عيادة عرماء لطب وجراحة الفم والأسنان</strong> تحت إشراف الدكتور محمد فهد الرميمه، إلى جانب المختبر الطبي الحديث. وجهتك الأولى للرعاية الصحية الشاملة التي تجمع بين أحدث التقنيات في طب الأسنان والتشخيص المخبري الدقيق تحت سقف واحد.</p>
+                    <p>نؤمن بأهمية التشخيص الدقيق والعلاج المتخصص، لذلك نحرص على توفير أحدث الأجهزة والمعدات الطبية، إلى جانب كادر طبي مؤهل يتمتع بخبرة واسعة في مختلف التخصصات. هدفنا أن تخرج من مركزنا بابتسامة مشرقة واطمئنان كامل على صحتك.</p>
+                    <div class="about-stats">
+                        <div class="about-stat">
+                            <div class="num" data-count="15">15+</div>
+                            <div class="label">عاماً من الخبرة</div>
+                        </div>
+                        <div class="about-stat">
+                            <div class="num" data-count="10">10K+</div>
+                            <div class="label">مريض وثقوا بنا</div>
+                        </div>
+                        <div class="about-stat">
+                            <div class="num" data-count="5">5+</div>
+                            <div class="label">أطباء استشاريون</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="about-image">
+                    <div class="icon-mosaic">
+                        <div class="tile"><i class="fas fa-tooth"></i><span>طب الأسنان</span></div>
+                        <div class="tile"><i class="fas fa-flask"></i><span>المختبر</span></div>
+                        <div class="tile"><i class="fas fa-stethoscope"></i><span>تشخيص دقيق</span></div>
+                        <div class="tile"><i class="fas fa-hand-holding-heart"></i><span>رعاية شخصية</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
 
-    </main>
+    <!-- ===== DEPARTMENTS ===== -->
+    <section class="section departments" id="departments">
+        <div class="container">
+            <h2 class="section-title">خدماتنا المتكاملة</h2>
+            <p class="section-subtitle">عيادة عرماء لطب وجراحة الفم والأسنان والمختبر الطبي الحديث</p>
+            <div class="dept-grid">
 
-<nav class="fixed bottom-0 left-0 right-0 bg-white border-t flex justify-around p-3 pb-6 shadow-2xl z-40">
-    <button id="nav-dash" onclick="tab('dash')" class="flex flex-col items-center gap-1 text-blue-600 transition-all">
-        <span class="text-xl">🏠</span><span class="text-[10px] font-bold">الرئيسية</span>
-    </button>
-    <button id="nav-stats" onclick="tab('stats'); calculateStats('all');" class="flex flex-col items-center gap-1 text-slate-400 transition-all">
-        <span class="text-xl">📊</span><span class="text-[10px] font-bold">التقارير</span>
-    </button>
-    <button id="nav-pts" onclick="tab('pts')" class="flex flex-col items-center gap-1 text-slate-400 transition-all">
-        <span class="text-xl">➕</span><span class="text-[10px] font-bold">إضافة</span>
-    </button>
-</nav>
+                <!-- Dental Card -->
+                <div class="dept-card dental">
+                    <div class="dept-header">
+                        <div class="dept-icon dental"><i class="fas fa-tooth"></i></div>
+                        <h3>عيادة عرماء لطب وجراحة الفم والأسنان <small>.</small></h3>
+                    </div>
+                    <div class="dept-body">
+                        <div class="dept-subsection">
+                            <h4 class="dept-subtitle"><i class="fas fa-gem"></i> التجميل والأسنان</h4>
+                            <ul>
+                                <li><i class="fas fa-check-circle"></i> ابتسامة هوليود (فينير)</li>
+                                <li><i class="fas fa-check-circle"></i> تبييض الأسنان (بأحدث أجهزة التبييض)</li>
+                                <li><i class="fas fa-check-circle"></i> مجوهرات الأسنان</li>
+                            </ul>
+                        </div>
+                        <div class="dept-subsection">
+                            <h4 class="dept-subtitle"><i class="fas fa-teeth"></i> التركيب والزراعة</h4>
+                            <ul>
+                                <li><i class="fas fa-check-circle"></i> زراعة الأسنان</li>
+                                <li><i class="fas fa-check-circle"></i> تراكيب الزيركون والخزف الحديثة</li>
+                                <li><i class="fas fa-check-circle"></i> أطقم الأسنان (ثابتة ومتحركة / كلي وجزئي)</li>
+                            </ul>
+                        </div>
+                        <div class="dept-subsection">
+                            <h4 class="dept-subtitle"><i class="fas fa-tools"></i> التقويم والعلاجات</h4>
+                            <ul>
+                                <li><i class="fas fa-check-circle"></i> تقويم الأسنان (ثابت ومتحرك)</li>
+                                <li><i class="fas fa-check-circle"></i> علاج العصب بأحدث أجهزة الروتاري</li>
+                                <li><i class="fas fa-check-circle"></i> حشوات الأسنان التجميلية</li>
+                            </ul>
+                        </div>
+                        <div class="dept-subsection">
+                            <h4 class="dept-subtitle"><i class="fas fa-hand-holding-heart"></i> الجراحة والعناية</h4>
+                            <ul>
+                                <li><i class="fas fa-check-circle"></i> خلع جراحي</li>
+                                <li><i class="fas fa-check-circle"></i> علاج مشاكل اللثة</li>
+                                <li><i class="fas fa-check-circle"></i> عناية خاصة لمتابعة النساء الحوامل</li>
+                            </ul>
+                        </div>
+                        <div class="dept-subsection">
+                            <h4 class="dept-subtitle"><i class="fas fa-x-ray"></i> الأشعة</h4>
+                            <ul>
+                                <li><i class="fas fa-check-circle"></i> أشعة الأسنان الرقمية للتشخيص الدقيق والفوري</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
 
+                <!-- Lab Card -->
+                <div class="dept-card lab">
+                    <div class="dept-header">
+                        <div class="dept-icon lab"><i class="fas fa-microscope"></i></div>
+                        <h3>المختبر الطبي الحديث <small>تشخيص دقيق ونتائج موثوقة</small></h3>
+                    </div>
+                    <div class="dept-body">
+                        <ul>
+                            <li><i class="fas fa-check-circle"></i> <i class="fas fa-droplet" style="color:var(--teal);margin-left:8px"></i> فحوصات الدم الشاملة (CBC)</li>
+                            <li><i class="fas fa-check-circle"></i> <i class="fas fa-dna" style="color:var(--teal);margin-left:8px"></i> الفحوصات الهرمونية والكيميائية بدقة عالية</li>
+                            <li><i class="fas fa-check-circle"></i> <i class="fas fa-bacteria" style="color:var(--teal);margin-left:8px"></i> الفحوصات الميكروبيولوجية والمزارع</li>
+                            <li><i class="fas fa-check-circle"></i> <i class="fas fa-vial" style="color:var(--teal);margin-left:8px"></i> الفحوصات الروتينية والتشخيصية السريعة</li>
+                        </ul>
+                    </div>
+                </div>
 
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== WORKING HOURS ===== -->
+    <section class="section hours" id="hours">
+        <div class="container">
+            <h2 class="section-title">أوقات الدوام</h2>
+            <p class="section-subtitle">نستقبلكم على فترتين صباحية ومسائية طوال أيام الأسبوع</p>
+            <div class="hours-card">
+                <div class="hours-header">
+                    <i class="fas fa-clock"></i>
+                    <h3>مواعيد العمل</h3>
+                </div>
+                <table class="hours-table">
+                    <tr>
+                        <td><i class="fas fa-sun"></i> الفترة الصباحية</td>
+                        <td>8:00 صباحاً – 1:00 ظهراً</td>
+                    </tr>
+                    <tr>
+                        <td><i class="fas fa-moon"></i> الفترة المسائية</td>
+                        <td>4:00 عصراً – 10:00 ليلاً</td>
+                    </tr>
+                </table>
+                <div class="hours-note">
+                    <i class="fas fa-calendar-alt"></i> جميع أيام الأسبوع ما عدا يوم الجمعة
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== CONTACT & BOOKING ===== -->
+    <section class="section contact" id="contact">
+        <div class="container">
+            <h2 class="section-title">تواصل معنا</h2>
+            <p class="section-subtitle">نحن هنا للإجابة على استفساراتكم وحجز مواعيدكم</p>
+            <div class="contact-grid">
+
+                <!-- Contact Info & Map -->
+                <div class="contact-info">
+                    <div class="contact-map">
+                        <iframe
+                            src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d1000!2d47.255698!3d15.344106!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zMTXCsDIwJzM4LjgiTiA0N8KwMTUnMjAuNSJF!5e0!3m2!1sar!2s!4v1"
+                            title="موقع مركز الخالد الطبي على الخريطة"
+                            allowfullscreen=""
+                            loading="lazy"
+                            referrerpolicy="no-referrer-when-downgrade">
+                        </iframe>
+                    </div>
+                    <a href="https://goo.gl/maps/RUJJUeFgKG3uSRWi7" target="_blank" rel="noopener" class="btn btn-primary" style="justify-content:center;text-align:center;width:100%;"><i class="fas fa-map-marked-alt"></i> افتح في خرائط جوجل</a>
+
+                    <div class="info-item">
+                        <i class="fas fa-phone-alt"></i>
+                        <div class="info-text">
+                            <strong>رقم الهاتف</strong>
+                            <span>771872426</span>
+                        </div>
+                    </div>
+                    <div class="info-item">
+                        <i class="fas fa-map-marker-alt"></i>
+                        <div class="info-text">
+                            <strong>العنوان</strong>
+                            <span>أمام مستشفى عرماء</span>
+                        </div>
+                    </div>
+                    <div class="info-item">
+                        <i class="fas fa-envelope"></i>
+                        <div class="info-text">
+                            <strong>البريد الإلكتروني</strong>
+                            <span>info@alkhaled-med.com</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Booking Form -->
+                <div class="booking-form">
+                    <h3><i class="fas fa-pen"></i> احجز موعدك الآن</h3>
+                    <form id="bookingForm" onsubmit="return handleBooking(event)">
+                        <div class="form-group">
+                            <label><i class="fas fa-user"></i> الاسم الكامل</label>
+                            <input type="text" name="name" placeholder="أدخل اسمك" required>
+                        </div>
+                        <div class="form-group">
+                            <label><i class="fas fa-phone"></i> رقم الهاتف</label>
+                            <input type="tel" name="phone" placeholder="771872426" required>
+                        </div>
+                        <div class="form-group">
+                            <label><i class="fas fa-stethoscope"></i> القسم</label>
+                            <select name="department" required>
+                                <option value="">-- اختر القسم --</option>
+                                <option value="dental">عيادة الأسنان</option>
+                                <option value="lab">المختبر الطبي</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label><i class="fas fa-calendar-day"></i> التاريخ المرغوب</label>
+                            <input type="date" name="date" required>
+                        </div>
+                        <button type="submit" class="btn-submit">
+                            <i class="fas fa-paper-plane"></i> إرسال الطلب
+                        </button>
+                    </form>
+                    <div id="formSuccess" style="display:none;margin-top:16px;padding:14px;background:var(--teal-light);color:var(--teal-dark);border-radius:var(--radius-sm);text-align:center;font-weight:600;">
+                        <i class="fas fa-check-circle"></i> تم إرسال طلبك بنجاح! سنتواصل معك قريباً.
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== FOOTER ===== -->
+    <footer class="footer">
+        <div class="container">
+            <div class="social-links">
+                <a href="#" aria-label="فيسبوك"><i class="fab fa-facebook-f"></i></a>
+                <a href="#" aria-label="تويتر"><i class="fab fa-twitter"></i></a>
+                <a href="#" aria-label="إنستغرام"><i class="fab fa-instagram"></i></a>
+                <a href="#" aria-label="واتساب"><i class="fab fa-whatsapp"></i></a>
+                <a href="#" aria-label="تيليجرام"><i class="fab fa-telegram-plane"></i></a>
+            </div>
+            <p>&copy; 2026 <a href="#">مركز الخالد الطبي | عيادة عرماء لطب وجراحة الفم والأسنان</a>. دقة في التشخيص، وإبداع في التنفيذ.</p>
+        </div>
+    </footer>
+
+    <!-- ===== FLOATING WHATSAPP ===== -->
+    <a id="whatsappFloat" href="https://wa.me/967771872426?text=%D8%A7%D9%84%D8%B3%D9%84%D8%A7%D9%85%20%D8%B9%D9%84%D9%8A%D9%83%D9%85%D8%8C%20%D8%A3%D8%B1%D8%BA%D8%A8%20%D9%81%D9%8A%20%D8%A7%D9%84%D8%A7%D8%B3%D8%AA%D9%81%D8%B3%D8%A7%D8%B1%20%D8%B9%D9%86%20%D8%AE%D8%AF%D9%85%D8%A7%D8%AA%20%D8%B9%D9%8A%D8%A7%D8%AF%D8%A9%20%D8%B9%D8%B1%D9%85%D8%A7%D8%A1" class="whatsapp-float" target="_blank" rel="noopener" aria-label="واتساب">
+        <div class="pulse"></div>
+        <i class="fab fa-whatsapp" style="position:relative;z-index:1;"></i>
+    </a>
+
+    <!-- ===== JAVASCRIPT ===== -->
     <script>
-    
-    
-    const SERVER_URL = "https://wadilni-1.onrender.com"; 
-
-    const db = new Dexie("DentalOS_DB");
-    db.version(1).stores({ patients: "id, FullName, Phone, isSynced" });
-  
-        // 1. قاعدة البيانات المحلية
-        
-        
-        let currentPatient = null;
-
-        // 2. إدارة الواجهة والبحث
-        async function loadPatients() {
-            const all = await db.patients.toArray();
-            renderList(all.reverse());
-        }
-        
-   
-// --- إعدادات Groq الذكية ---
-// تقسيم المفتاح لأجزاء لتجنب اكتشافه من قبل روبوتات GitHub
-const _p1 = "gsk_1C6N2XzH";
-const _p2 = "FWkRMxEOTMv1WGdy";
-const _p3 = "b3FYQHrQaYSOFr0e";
-const _p4 = "VcE1HUvoGgek";
-
-// دمج الأجزاء عند التشغيل
-const GROQ_API_KEY = _p1 + _p2 + _p3 + _p4;
-
-
-// --- إعدادات التعرف المحدثة ---
-const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-recognition.lang = 'ar-YE'; 
-recognition.interimResults = true; // تفعيل النتائج المؤقتة لعرضها أثناء الكلام
-recognition.continuous = true;    // الاستمرار في الاستماع حتى نقرر التوقف
-
-let silenceTimer; 
-
-function startVoiceEntry() {
-    try {
-        recognition.start();
-        document.getElementById('recording-indicator').classList.remove('hidden');
-        document.getElementById('voice-status').innerText = "أنا أسمعك الآن...";
-        // تصفير منطقة النص عند البدء
-        document.getElementById('live-transcript').innerText = "ابدأ التحدث...";
-    } catch (e) {
-        console.error("Speech Error:", e);
-    }
-}
-
-recognition.onresult = (event) => {
-    let interimTranscript = '';
-    let finalTranscript = '';
-
-    // تجميع النص (الحي والنهائي)
-    for (let i = event.resultIndex; i < event.results.length; ++i) {
-        if (event.results[i].isFinal) {
-            finalTranscript += event.results[i][0].transcript;
-        } else {
-            interimTranscript += event.results[i][0].transcript;
-        }
-    }
-
-    // طباعة ما يتم سماعه فوراً في واجهة المستخدم
-    const displayLink = document.getElementById('live-transcript');
-    if(displayLink) displayLink.innerText = finalTranscript || interimTranscript;
-
-    // --- منطق التوقف التلقائي الذكي ---
-    clearTimeout(silenceTimer);
-    // إذا سكت الطبيب لمدة 1.8 ثانية، سيتوقف الميكروفون تلقائياً ويعالج البيانات
-    silenceTimer = setTimeout(() => {
-        recognition.stop();
-    }, 1800); 
-};
-
-recognition.onend = async () => {
-    document.getElementById('recording-indicator').classList.add('hidden');
-    const transcript = document.getElementById('live-transcript').innerText;
-
-    // التأكد من وجود نص حقيقي قبل الإرسال لـ Groq
-    if (transcript.length > 3 && transcript !== "ابدأ التحدث...") {
-        document.getElementById('voice-status').innerText = "جاري تأكيد البيانات...";
-        await sendToGroq(transcript);
-    } else {
-        document.getElementById('voice-status').innerText = "🎙️ لم يتم التقاط صوت واضح";
-    }
-};
-
-// فصل وظيفة Groq للتنظيم
-async function sendToGroq(text) {
-    try {
-        const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-            method: "POST",
-            headers: {
-                "Authorization": `Bearer ${GROQ_API_KEY}`,
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                messages: [
-                    {
-                        role: "system",
-                        content: `أنت مساعد تقني خبير في عيادات الأسنان اليمنية. استخرج البيانات وحولها لـ JSON: {name, phone, procedure, cost, paid}. 
-                        ترجم المصطلحات: (قلع/شلع -> قلع سن)، (عصب -> علاج عصب RCT)، (تلبيسة -> تركيب تاج).`
-                    },
-                    { role: "user", content: text }
-                ],
-                model: "llama3-8b-8192",
-                response_format: { type: "json_object" }
-            })
-        });
-
-        const result = await response.json();
-        const aiData = JSON.parse(result.choices[0].message.content);
-        
-        fillSmartFields(aiData);
-        document.getElementById('voice-status').innerText = "✅ تم التعرف بنجاح";
-    } catch (e) {
-        console.error("Groq Error:", e);
-        document.getElementById('voice-status').innerText = "❌ فشل التحليل الذكي";
-    }
-}
-
-async function fillSmartFields(data) {
-    // تعبئة الحقول أولاً
-    if (data.name) document.getElementById('n').value = data.name;
-    if (data.phone) document.getElementById('ph').value = data.phone;
-    if (data.procedure) document.getElementById('s-proc').value = data.procedure;
-    if (data.cost) document.getElementById('s-cost').value = data.cost;
-    if (data.paid) document.getElementById('s-paid').value = data.paid;
-
-    // --- منطق الحفظ التلقائي ---
-    
-    // 1. إذا كنا في صفحة "إضافة مريض" وتوفر (الاسم والهاتف)، احفظ فوراً
-    if (document.getElementById('tab-pts').classList.contains('page-active') && data.name && data.phone) {
-        setTimeout(() => { 
-            if(confirm(`هل تريد حفظ المريض الجديد: ${data.name}؟`)) savePatient(); 
-        }, 500);
-    }
-    
-    // 2. إذا كنا داخل "بروفايل مريض" وتوفر (الإجراء والمبلغ)، أضف الجلسة فوراً
-    if (document.getElementById('tab-profile').classList.contains('page-active') && data.procedure && data.cost) {
-        setTimeout(() => {
-            if(confirm(`هل تريد إضافة إجراء "${data.procedure}" لهذا المريض؟`)) addSession();
-        }, 500);
-    }
-
-    // تغذية صوتية
-    const feedback = new SpeechSynthesisUtterance(`تم استخراج البيانات`);
-    feedback.lang = 'ar-SA';
-    window.speechSynthesis.speak(feedback);
-}
-
-
-function fillFields(data) {
-    // تعبئة حقول "إضافة مريض جديد"
-    if (data.name) document.getElementById('n').value = data.name;
-    if (data.phone) document.getElementById('ph').value = data.phone;
-    
-    // تعبئة حقول "الإجراء المالي" في الملف الشخصي
-    if (data.procedure) document.getElementById('s-proc').value = data.procedure;
-    if (data.cost) document.getElementById('s-cost').value = data.cost;
-    if (data.paid) document.getElementById('s-paid').value = data.paid;
-
-    // توفير تغذية راجعة صوتية بسيطة (اختياري)
-    const msg = new SpeechSynthesisUtterance(`تم استخراج بيانات ${data.name || 'المريض'}`);
-    msg.lang = 'ar-SA';
-    window.speechSynthesis.speak(msg);
-}
-     
-
-    // 2. تعديل وظيفة المزامنة (Sync) لتشمل الرابط الكامل
-    async function syncNow() {
-        if (!navigator.onLine) return;
-        const unsynced = await db.patients.where('isSynced').equals(0).toArray();
-        if (unsynced.length === 0) return;
-        try {
-            const res = await fetch(`${SERVER_URL}/api/sync`, { // تم إضافة الرابط الكامل
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ patients: unsynced })
-            });
-            if (res.ok) {
-                for (let p of unsynced) { p.isSynced = 1; await db.patients.put(p); }
-                loadPatients();
-            }
-        } catch (e) { console.log("Sync Error"); }
-    }
-
-    // 3. تعديل وظيفة رفع الصور (Upload) لتشمل الرابط الكامل
-    async function uploadImage(input) {
-        if (!input.files[0]) return;
-        const formData = new FormData();
-        formData.append('photo', input.files[0]);
-
-        try {
-            // تم إضافة الرابط الكامل هنا
-            const res = await fetch(`${SERVER_URL}/api/upload/${currentPatient.id}`, { 
-                method: 'POST', 
-                body: formData 
-            });
-            const data = await res.json();
-            
-            if (!currentPatient.gallery) currentPatient.gallery = [];
-            currentPatient.gallery.push({ url: data.url, date: new Date().toLocaleDateString() });
-            currentPatient.isSynced = 0;
-            await db.patients.put(currentPatient);
-            renderGallery();
-        } catch (e) { alert("فشل الرفع للسيرفر"); }
-    }
-
-    // 4. وظيفة إرسال تذكير المواعيد (كاملة ومصلحة)
-    async function scheduleAppointment() {
-        const dateInput = document.getElementById('app-date').value;
-        if (!dateInput) return alert("⚠️ اختر تاريخ الموعد أولاً");
-
-        const dateFormatted = new Date(dateInput).toLocaleString('ar-YE', {
-            weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit'
-        });
-
-        const msg = `مرحباً ${currentPatient.FullName}،\nنود تذكيرك بموعدك القادم في عيادة د. محمد فهد\nبتاريخ: ${dateFormatted}\nدمت بصحة عافية.`;
-
-        if (navigator.onLine) {
-            try {
-                // استخدام الرابط الكامل للسيرفر
-                const res = await fetch(`${SERVER_URL}/api/send-reminder`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ phone: currentPatient.Phone, message: msg })
+        // ---- Mobile Menu Toggle ----
+        (function() {
+            const hamburger = document.getElementById('hamburger');
+            const navLinks  = document.getElementById('navLinks');
+            if (hamburger && navLinks) {
+                hamburger.addEventListener('click', function() {
+                    this.classList.toggle('open');
+                    navLinks.classList.toggle('open');
                 });
-
-                const data = await res.json();
-                if (data.success) alert("✅ تم إرسال رسالة الواتساب بنجاح");
-                else alert("❌ فشل الإرسال من السيرفر");
-            } catch (e) {
-                alert("📡 السيرفر غير مستجيب، تأكد من تشغيله");
-            }
-        } else {
-            alert("📶 لا يوجد إنترنت حالياً");
-        }
-    }
-
-    // 5. تعديل حذف المريض من السيرفر
-    async function deletePatient() {
-        if (!currentPatient) return;
-        const confirmDelete = confirm(`هل أنت متأكد من حذف ملف: ${currentPatient.FullName}؟`);
-        if (confirmDelete) {
-            try {
-                await db.patients.delete(currentPatient.id);
-                if (navigator.onLine) {
-                    // تم إضافة الرابط الكامل هنا
-                    fetch(`${SERVER_URL}/api/delete/${currentPatient.id}`, { method: 'DELETE' });
-                }
-                tab('dash');
-                loadPatients();
-            } catch (e) { alert("فشل الحذف"); }
-        }
-    }
-
-
-
-
-
-        function renderList(list) {
-            document.getElementById('p-list').innerHTML = list.map(p => `
-                <div onclick="openProfile(${p.id})" class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex justify-between items-center active:scale-95 transition-transform">
-                    <div>
-                        <h3 class="font-bold text-slate-800 text-sm">${p.FullName}</h3>
-                        <p class="text-[10px] text-slate-400 font-mono">${p.Phone}</p>
-                    </div>
-                    <span>${p.isSynced ? '✅' : '⏳'}</span>
-                </div>`).join('');
-        }
-
-        function searchPts() {
-            const q = document.getElementById('searchBar').value.toLowerCase();
-            db.patients.toArray().then(all => {
-                const filtered = all.filter(p => p.FullName.toLowerCase().includes(q) || p.Phone.includes(q));
-                renderList(filtered.reverse());
-            });
-        }
-
-        // 3. العمليات الحيوية
-        async function savePatient() {
-    const name = document.getElementById('n').value.trim();
-    const phone = document.getElementById('ph').value.trim();
-
-    // 1. التحقق من الحقول الفارغة
-    if(!name || !phone) return alert("⚠️ يرجى إدخال الاسم ورقم الهاتف");
-
-    // 2. التحقق من صيغة الرقم اليمني (تبدأ بـ 7 وتتكون من 9 أرقام)
-    const phoneRegex = /^7[0-9]{8}$/;
-    if(!phoneRegex.test(phone)) {
-        return alert("❌ رقم الهاتف غير صحيح. يجب أن يبدأ بـ 7 ويتكون من 9 أرقام.");
-    }
-
-    // 3. التحقق من عدم تكرار المريض (بناءً على رقم الهاتف)
-    const exists = await db.patients.where('Phone').equals(phone).first();
-    if(exists) {
-        return alert(`🚫 هذا الرقم مسجل مسبقاً باسم: ${exists.FullName}`);
-    }
-    
-    const newPatient = {
-        id: Date.now(),
-        FullName: name,
-        Phone: phone,
-        Sessions: [],
-        Finance: { totalCost: 0, paid: 0 },
-        teethData: {}, // إضافة كائن مخطط الأسنان تلقائياً
-        gallery: [],   // إضافة كائن المعرض تلقائياً
-        isSynced: 0
-    };
-
-    try {
-        await db.patients.add(newPatient);
-        // إعادة ضبط الحقول وتنبيه المستخدم بنجاح
-        document.getElementById('n').value = '';
-        document.getElementById('ph').value = '';
-        alert("✅ تم إنشاء ملف المريض بنجاح");
-        tab('dash');
-        loadPatients();
-        if(navigator.onLine) syncNow();
-    } catch (e) {
-        alert("حدث خطأ أثناء الحفظ");
-    }
-}
-
-        async function openProfile(id) {
-    currentPatient = await db.patients.get(id);
-    
-    // تحديث البيانات في الصفحة قبل عرضها
-    document.getElementById('prof-name').innerText = currentPatient.FullName;
-    document.getElementById('prof-phone').innerText = currentPatient.Phone;
-    
-    updateFinanceUI();
-    renderSessions();
-    renderOdontogram();
-    renderGallery();
-    
-    // الانتقال لصفحة البروفايل
-    tab('profile');
-}
-
-        async function addSession() {
-    const proc = document.getElementById('s-proc').value;
-    const cost = parseFloat(document.getElementById('s-cost').value) || 0;
-    const paid = parseFloat(document.getElementById('s-paid').value) || 0;
-    
-    if(!proc) return alert("يرجى تحديد نوع الإجراء");
-
-    currentPatient.Sessions.push({ 
-        date: new Date().toLocaleDateString('ar-YE'), 
-        procedure: proc, 
-        cost, 
-        paid 
-    });
-    
-    currentPatient.Finance.totalCost += cost;
-    currentPatient.Finance.paid += paid;
-    currentPatient.isSynced = 0;
-
-    await db.patients.put(currentPatient);
-    
-    // إعادة ضبط الحقول
-    document.getElementById('s-proc').value = '';
-    document.getElementById('s-proc-select').value = '';
-    document.getElementById('s-cost').value = '';
-    document.getElementById('s-paid').value = '';
-    
-    updateFinanceUI(); 
-    renderSessions(); 
-    if(navigator.onLine) syncNow();
-    alert("تم تحديث سجل المريض بنجاح ✅");
-}
-
-        // 4. نظام المواعيد والواتساب
-        async function scheduleAppointment() {
-    const dateInput = document.getElementById('app-date').value;
-    if (!dateInput) return alert("⚠️ اختر تاريخ الموعد أولاً");
-
-    // تنسيق التاريخ ليكون مناسباً للمريض في اليمن
-    const dateFormatted = new Date(dateInput).toLocaleString('ar-YE', {
-        weekday: 'long', 
-        day: 'numeric', 
-        month: 'long', 
-        hour: '2-digit', 
-        minute: '2-digit'
-    });
-
-    const msg = `مرحباً ${currentPatient.FullName}،\nنود تذكيرك بموعدك القادم في عيادة د. محمد فهد\nبتاريخ: ${dateFormatted}\nدمت بصحة عافية.`;
-
-    // 🔴 الخطوة الأهم: تحديد رابط السيرفر الفعلي
-    const SERVER_URL = "https://wadilni-1.onrender.com"; 
-
-    if (navigator.onLine) {
-        try {
-            // إضافة الرابط الكامل قبل المسار
-            const res = await fetch(`${SERVER_URL}/api/send-reminder`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    phone: currentPatient.Phone, 
-                    message: msg 
-                })
-            });
-
-            const data = await res.json();
-            if (data.success) {
-                alert("✅ تم إرسال رسالة الواتساب بنجاح");
-            } else {
-                alert("❌ السيرفر متصل ولكن فشل الإرسال: " + data.error);
-            }
-        } catch (e) {
-            alert("📡 فشل الاتصال بالسيرفر! تأكد أن السيرفر يعمل على Render.");
-        }
-    } else {
-        alert("📶 لا يوجد إنترنت، تم حفظ الموعد في ذاكرة الهاتف فقط.");
-    }
-}
-
-        // 5. المزامنة والمالية
-        function updateFinanceUI() {
-            const total = currentPatient.Finance.totalCost;
-            const paid = currentPatient.Finance.paid;
-            document.getElementById('f-total').innerText = total + "$";
-            document.getElementById('f-paid').innerText = paid + "$";
-            document.getElementById('f-rem').innerText = (total - paid) + "$";
-        }
-
-        function renderSessions() {
-    const list = document.getElementById('sessions-list');
-    if (!currentPatient.Sessions || currentPatient.Sessions.length === 0) {
-        list.innerHTML = '<p class="text-[10px] text-center text-slate-400 py-4">لا توجد سجلات سابقة</p>';
-        return;
-    }
-
-    list.innerHTML = currentPatient.Sessions.map((s, idx) => {
-        const debt = (s.cost || 0) - (s.paid || 0);
-        return `
-            <div class="bg-white border border-slate-100 rounded-2xl p-3 shadow-sm hover:shadow-md transition-shadow">
-                <div class="flex justify-between items-start mb-2">
-                    <div class="flex items-center gap-2">
-                        <div class="w-2 h-2 rounded-full ${debt > 0 ? 'bg-orange-400' : 'bg-emerald-400'}"></div>
-                        <span class="font-bold text-slate-800 text-xs">${s.procedure}</span>
-                    </div>
-                    <span class="text-[9px] text-slate-400 font-mono">${s.date}</span>
-                </div>
-                
-                <div class="grid grid-cols-3 gap-1 mt-2 pt-2 border-t border-slate-50">
-                    <div class="text-center">
-                        <p class="text-[8px] text-slate-400 uppercase">التكلفة</p>
-                        <p class="font-bold text-[11px] text-slate-700">${s.cost}$</p>
-                    </div>
-                    <div class="text-center">
-                        <p class="text-[8px] text-slate-400 uppercase">المدفوع</p>
-                        <p class="font-bold text-[11px] text-emerald-600">${s.paid}$</p>
-                    </div>
-                    <div class="text-center bg-slate-50 rounded-lg py-1">
-                        <p class="text-[8px] text-slate-400 uppercase">المتبقي</p>
-                        <p class="font-bold text-[11px] ${debt > 0 ? 'text-red-500' : 'text-slate-400'}">${debt}$</p>
-                    </div>
-                </div>
-                
-                <div class="flex justify-end mt-2">
-                     <button onclick="deleteSession(${idx})" class="text-[9px] text-red-300 hover:text-red-500">حذف السجل ×</button>
-                </div>
-            </div>
-        `;
-    }).reverse().join('');
-}
-
-
-        async function syncNow() {
-            if (!navigator.onLine) return;
-            const unsynced = await db.patients.where('isSynced').equals(0).toArray();
-            if (unsynced.length === 0) return;
-            try {
-                const res = await fetch('/api/sync', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ patients: unsynced })
+                navLinks.querySelectorAll('a').forEach(function(link) {
+                    link.addEventListener('click', function() {
+                        hamburger.classList.remove('open');
+                        navLinks.classList.remove('open');
+                    });
                 });
-                if (res.ok) {
-                    for (let p of unsynced) { p.isSynced = 1; await db.patients.put(p); }
-                    loadPatients();
+            }
+        })();
+
+        // ---- Active Nav Link Highlighting ----
+        (function() {
+            const sections = document.querySelectorAll('section[id], #hero');
+            const navAnchors = document.querySelectorAll('.nav-links a');
+            function onScroll() {
+                let current = '';
+                sections.forEach(function(sec) {
+                    const top = sec.offsetTop - 120;
+                    if (window.scrollY >= top) current = sec.getAttribute('id') || 'hero';
+                });
+                navAnchors.forEach(function(a) {
+                    a.classList.remove('active');
+                    const href = a.getAttribute('href').replace('#', '');
+                    if (href === current) a.classList.add('active');
+                });
+            }
+            window.addEventListener('scroll', onScroll, { passive: true });
+            onScroll();
+        })();
+
+        // ---- Booking Form Handler - WhatsApp Integration ----
+        function handleBooking(e) {
+            e.preventDefault();
+            var form = document.getElementById('bookingForm');
+            var name = form.querySelector('input[name="name"]').value.trim();
+            var phone = form.querySelector('input[name="phone"]').value.trim();
+            var deptSelect = form.querySelector('select[name="department"]');
+            var dept = deptSelect.options[deptSelect.selectedIndex].text;
+            var date = form.querySelector('input[name="date"]').value;
+
+            var serviceLabel = dept;
+            var dateLabel = date ? date.split('-').reverse().join('/') : '';
+
+            var message = 'السلام عليكم، أرغب في حجز موعد في عيادة عرماء:\n\n'
+                        + 'الاسم: ' + name + '\n'
+                        + 'رقم الهاتف: ' + phone + '\n'
+                        + 'القسم: ' + serviceLabel + '\n'
+                        + 'التاريخ: ' + dateLabel;
+
+            var encoded = encodeURIComponent(message);
+            var waUrl = 'https://wa.me/967771872426?text=' + encoded;
+            window.open(waUrl, '_blank');
+            return false;
+        }
+
+        // ---- Set min date on date input to today ----
+        (function() {
+            const dateInput = document.querySelector('input[name="date"]');
+            if (dateInput) {
+                const today = new Date().toISOString().split('T')[0];
+                dateInput.setAttribute('min', today);
+            }
+        })();
+
+        // ---- Service Worker for Offline Caching ----
+        if ('serviceWorker' in navigator) {
+            // Inline registration using a Blob URL so everything stays in one file.
+            (function() {
+                const swCode = [
+                    'self.addEventListener("install", function(e) {',
+                    '  e.waitUntil(',
+                    '    caches.open("alkhaled-v1").then(function(cache) {',
+                    '      return cache.addAll(["./"]);',
+                    '    })',
+                    '  );',
+                    '  self.skipWaiting();',
+                    '});',
+                    'self.addEventListener("fetch", function(e) {',
+                    '  e.respondWith(',
+                    '    caches.match(e.request).then(function(cached) {',
+                    '      if (cached) return cached;',
+                    '      return fetch(e.request).then(function(response) {',
+                    '        if (!response || response.status !== 200 || response.type !== "basic")',
+                    '          return response;',
+                    '        var clone = response.clone();',
+                    '        caches.open("alkhaled-v1").then(function(cache) { cache.put(e.request, clone); });',
+                    '        return response;',
+                    '      });',
+                    '    })',
+                    '  );',
+                    '});',
+                    'self.addEventListener("activate", function(e) {',
+                    '  e.waitUntil(clients.claim());',
+                    '});'
+                ].join('\n');
+                try {
+                    var blob = new Blob([swCode], { type: 'application/javascript' });
+                    var swUrl = URL.createObjectURL(blob);
+                    navigator.serviceWorker.register(swUrl, { scope: './' }).then(function() {
+                        // Service worker registered for offline support
+                    }).catch(function() {
+                        // SW registration failed — site works online normally
+                    });
+                } catch(e) {
+                    // Inline SW not supported in this environment
                 }
-            } catch (e) { console.log("Sync Error"); }
+            })();
         }
-
-        function tab(t) {
-    const pages = ['dash', 'stats', 'pts', 'profile'];
-    
-    pages.forEach(p => {
-        const element = document.getElementById('tab-' + p);
-        if (element) {
-            // إخفاء الصفحة وإزالة كلاس الأنيميشن
-            element.classList.add('hidden');
-            element.classList.remove('page-active');
-        }
-    });
-
-    // إظهار الصفحة المستهدفة مع تفعيل الأنيميشن
-    const targetPage = document.getElementById('tab-' + t);
-    if (targetPage) {
-        targetPage.classList.remove('hidden');
-        // استخدام setTimeout بسيط لضمان إعادة تشغيل الأنيميشن
-        setTimeout(() => {
-            targetPage.classList.add('page-active');
-        }, 10);
-    }
-
-    // تحديث ألوان أيقونات التنقل السفلي
-    const navItems = ['dash', 'stats', 'pts'];
-    navItems.forEach(item => {
-        const navBtn = document.getElementById('nav-' + item);
-        if (navBtn) {
-            if (item === t) {
-                navBtn.classList.replace('text-slate-400', 'text-blue-600');
-                navBtn.querySelector('span:first-child').classList.add('scale-110');
-            } else {
-                navBtn.classList.replace('text-blue-600', 'text-slate-400');
-                navBtn.querySelector('span:first-child').classList.remove('scale-110');
-            }
-        }
-    });
-
-    document.querySelector('main').scrollTop = 0;
-}
-
-        function updateOnlineStatus() {
-            const status = document.getElementById('connection-status');
-            if (navigator.onLine) {
-                status.innerText = "متصل بالسحابة (المزامنة نشطة)";
-                status.className = "text-[10px] text-white text-center py-1 font-bold status-online";
-                syncNow();
-            } else {
-                status.innerText = "وضع الأوفلاين (يتم الحفظ في الهاتف)";
-                status.className = "text-[10px] text-white text-center py-1 font-bold status-offline";
-            }
-        }
-
-        window.addEventListener('online', updateOnlineStatus);
-        window.addEventListener('offline', updateOnlineStatus);
-        updateOnlineStatus(); loadPatients();
-        
-        let selectedTooth = null;
-let compareSlots = [null, null];
-
-// --- وظائف مخطط الأسنان ---
-function renderOdontogram() {
-    const container = document.getElementById('odontogram-container');
-    const view = document.getElementById('tooth-view-type').value;
-    const teethCount = view === 'adult' ? 32 : 20;
-    
-    // تهيئة بيانات الأسنان إذا لم تكن موجودة
-    if (!currentPatient.teethData) currentPatient.teethData = {};
-
-    container.innerHTML = '';
-    for (let i = 1; i <= teethCount; i++) {
-        const status = currentPatient.teethData[i] || 'normal';
-        const color = status === 'caries' ? 'bg-red-500' : status === 'filling' ? 'bg-green-500' : status === 'missing' ? 'bg-slate-200' : 'bg-blue-400';
-        
-        container.innerHTML += `
-            <div onclick="selectTooth(${i})" id="tooth-${i}" 
-                 class="w-8 h-10 ${color} rounded-b-lg border-2 border-white shadow-sm flex items-center justify-center text-[10px] text-white font-bold cursor-pointer transition-all active:scale-90">
-                ${i}
-            </div>`;
-    }
-}
-
-function selectTooth(num) {
-    selectedTooth = num;
-    document.getElementById('tooth-control').classList.remove('hidden');
-    document.getElementById('selected-tooth-num').innerText = num;
-}
-
-async function setToothStatus(status) {
-    if (!selectedTooth) return;
-    currentPatient.teethData[selectedTooth] = status;
-    currentPatient.isSynced = 0;
-    await db.patients.put(currentPatient);
-    renderOdontogram();
-    document.getElementById('tooth-control').classList.add('hidden');
-}
-
-// --- وظائف معرض الصور ---
-async function uploadImage(input) {
-    if (!input.files[0]) return;
-    const formData = new FormData();
-    formData.append('photo', input.files[0]);
-
-    try {
-        const res = await fetch(`/api/upload/${currentPatient.id}`, { method: 'POST', body: formData });
-        const data = await res.json();
-        
-        if (!currentPatient.gallery) currentPatient.gallery = [];
-        currentPatient.gallery.push({ url: data.url, date: new Date().toLocaleDateString() });
-        currentPatient.isSynced = 0;
-        await db.patients.put(currentPatient);
-        renderGallery();
-    } catch (e) { alert("فشل الرفع"); }
-}
-
-function renderGallery() {
-    const grid = document.getElementById('gallery-grid');
-    grid.innerHTML = (currentPatient.gallery || []).map((img, idx) => `
-        <div onclick="addToCompare('${img.url}')" class="relative aspect-square bg-slate-100 rounded-lg overflow-hidden border border-slate-200">
-            <img src="${img.url}" class="object-cover w-full h-full">
-            <span class="absolute bottom-0 right-0 bg-black bg-opacity-50 text-white text-[8px] px-1">${img.date}</span>
-        </div>
-    `).join('');
-}
-
-// --- وظائف المقارنة ---
-function addToCompare(url) {
-    document.getElementById('compare-view').classList.remove('hidden');
-    if (!compareSlots[0]) {
-        compareSlots[0] = url;
-        document.getElementById('slot-1').innerHTML = `<img src="${url}" class="w-full h-full object-cover">`;
-    } else {
-        compareSlots[1] = url;
-        document.getElementById('slot-2').innerHTML = `<img src="${url}" class="w-full h-full object-cover">`;
-    }
-}
-
-function closeCompare() {
-    compareSlots = [null, null];
-    document.getElementById('compare-view').classList.add('hidden');
-    document.getElementById('slot-1').innerHTML = 'قبل';
-    document.getElementById('slot-2').innerHTML = 'بعد';
-}
-
-async function calculateStats(range = 'all') {
-    const allPatients = await db.patients.toArray();
-    const today = new Date().toLocaleDateString('ar-YE');
-    const thisMonth = new Date().getMonth();
-    const thisYear = new Date().getFullYear();
-
-    let totalRevenue = 0;
-    let totalPaid = 0;
-    let debtors = [];
-
-    allPatients.forEach(p => {
-        let patientDebt = p.Finance.totalCost - p.Finance.paid;
-        
-        // حساب الإجمالي بناءً على النطاق الزمني
-        p.Sessions.forEach(s => {
-            const sDate = s.date; // التاريخ مخزن بصيغة LocaleDateString
-            
-            let include = false;
-            if (range === 'all') include = true;
-            else if (range === 'today' && sDate === today) include = true;
-            else if (range === 'month') {
-                // ملاحظة: المقارنة هنا تحتاج لدقة في التواريخ، سنعتمد البساطة حالياً
-                if(sDate.includes(today.split(' ')[1])) include = true; 
-            }
-
-            if (include) {
-                totalRevenue += (s.cost || 0);
-                totalPaid += (s.paid || 0);
-            }
-        });
-
-        if (patientDebt > 0) {
-            debtors.push({ name: p.FullName, debt: patientDebt, id: p.id });
-        }
-    });
-
-    // تحديث الأرقام في الواجهة
-    document.getElementById('stat-total-revenue').innerText = `${totalRevenue}$`;
-    document.getElementById('stat-total-paid').innerText = `${totalPaid}$`;
-    document.getElementById('stat-total-debt').innerText = `${totalRevenue - totalPaid}$`;
-    document.getElementById('stat-patients-count').innerText = allPatients.length;
-
-    // عرض قائمة الديون (ترتيب تنازلي حسب المبلغ)
-    debtors.sort((a, b) => b.debt - a.debt);
-    const listHtml = debtors.slice(0, 5).map(d => `
-        <div onclick="openProfile(${d.id})" class="flex justify-between items-center bg-red-50 p-3 rounded-2xl border border-red-100 active:scale-95 transition">
-            <span class="text-xs font-bold text-slate-700">${d.name}</span>
-            <span class="text-xs font-black text-red-600">${d.debt}$</span>
-        </div>
-    `).join('');
-    
-    document.getElementById('debtors-list').innerHTML = listHtml || '<p class="text-[10px] text-center text-slate-400">لا توجد ديون معلقة</p>';
-}
-
-async function deletePatient() {
-    if (!currentPatient) return;
-
-    // رسالة تأكيد مخصصة
-    const confirmDelete = confirm(`هل أنت متأكد من حذف ملف المريض: ${currentPatient.FullName}؟\nسيتم مسح جميع الجلسات والصور والبيانات المالية نهائياً!`);
-    
-    if (confirmDelete) {
-        try {
-            await db.patients.delete(currentPatient.id);
-            alert("🗑️ تم حذف السجل بنجاح");
-            
-            // العودة للرئيسية وتحديث القائمة
-            tab('dash');
-            loadPatients();
-            
-            // في حال كنت تريد الحذف من السيرفر أيضاً (اختياري)
-            if (navigator.onLine) {
-                fetch(`/api/delete/${currentPatient.id}`, { method: 'DELETE' });
-            }
-        } catch (e) {
-            alert("فشل عملية الحذف");
-        }
-    }
-}
-
-function renderList(list) {
-    document.getElementById('p-list').innerHTML = list.map((p, index) => `
-        <div onclick="openProfile(${p.id})" 
-             style="animation-delay: ${index * 50}ms"
-             class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex justify-between items-center active:scale-95 transition-all animate-[slideUp_0.3s_ease-out_forwards] opacity-0">
-            <div>
-                <h3 class="font-bold text-slate-800 text-sm">${p.FullName}</h3>
-                <p class="text-[10px] text-slate-400 font-mono">${p.Phone}</p>
-            </div>
-            <span class="text-xs">${p.isSynced ? '✅' : '⏳'}</span>
-        </div>`).join('');
-}
-
-
-async function deleteSession(index) {
-    if (!confirm("هل تريد حذف هذا السجل المالي؟ سيتم تحديث إجمالي الحساب.")) return;
-    
-    // عكس العملية المالية
-    const session = currentPatient.Sessions[index];
-    currentPatient.Finance.totalCost -= (session.cost || 0);
-    currentPatient.Finance.paid -= (session.paid || 0);
-    
-    // إزالة الجلسة من المصفوفة
-    currentPatient.Sessions.splice(index, 1);
-    currentPatient.isSynced = 0;
-
-    await db.patients.put(currentPatient);
-    updateFinanceUI();
-    renderSessions();
-    if(navigator.onLine) syncNow();
-}
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js')
-    .then(() => console.log("✅ واجهة العيادة جاهزة للعمل بدون إنترنت"));
-}
-
-
-function startVoiceEntry() {
-    try {
-        recognition.start();
-        document.getElementById('recording-indicator').classList.remove('hidden');
-        document.getElementById('voice-status').innerText = "جاري الاستماع...";
-    } catch (e) {
-        console.error("Speech Recognition Error:", e);
-    }
-}
-
-// 3. معالجة النتيجة عند التوقف عن الكلام
-
     </script>
 </body>
 </html>
