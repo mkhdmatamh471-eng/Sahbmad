@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>مركز الخالد الطبي | عيادة عرماء لطب وجراحة الفم والأسنان والمختبر الطبي</title>
+    <title>مركز الخالد الطبي | مجمع عيادات متكامل</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -256,10 +256,10 @@
         }
         .hero-cards {
             display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 16px;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 14px;
             width: 100%;
-            max-width: 420px;
+            max-width: 500px;
         }
         .hero-card {
             background: var(--white);
@@ -403,6 +403,8 @@
         }
         .dept-header .dept-icon.dental { background: var(--primary-light); color: var(--primary); }
         .dept-header .dept-icon.lab { background: var(--teal-light); color: var(--teal); }
+        .dept-header .dept-icon.internal { background: #fef3c7; color: #d97706; }
+        .dept-header .dept-icon.obgyn { background: #fce7f3; color: #db2777; }
         .dept-header h3 {
             font-size: 1.15rem;
             font-weight: 800;
@@ -437,6 +439,8 @@
         .dept-body ul li .fa-check-circle { color: var(--teal); }
         .dept-card.dental .dept-body ul li .fa-check-circle { color: var(--primary); }
         .dept-card.lab .dept-body ul li .fa-check-circle { color: var(--teal); }
+        .dept-card.internal .dept-body ul li .fa-check-circle { color: #d97706; }
+        .dept-card.obgyn .dept-body ul li .fa-check-circle { color: #db2777; }
 
         /* Department Subsections */
         .dept-subsection {
@@ -463,6 +467,19 @@
         .dept-card.dental .dept-subtitle i { color: var(--primary); }
         .dept-card.lab .dept-subtitle i { color: var(--teal); }
         .dept-subsection ul { gap: 6px !important; }
+        .dept-note {
+            margin-top: 16px;
+            padding: 12px 18px;
+            background: #fef3c7;
+            border-radius: var(--radius-sm);
+            font-size: .85rem;
+            font-weight: 600;
+            color: #92400e;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .dept-card.obgyn .dept-note { background: #fce7f3; color: #9d174d; }
 
         /* ===== WORKING HOURS ===== */
         .hours {
@@ -686,7 +703,7 @@
             .hero-content p { margin: 0 auto 24px; }
             .hero-badges { justify-content: center; }
             .hero-buttons { justify-content: center; }
-            .hero-visual .hero-cards { max-width: 340px; }
+            .hero-visual .hero-cards { max-width: 380px; }
 
             .about-grid { grid-template-columns: 1fr; gap: 40px; }
 
@@ -700,12 +717,12 @@
                 position: fixed;
                 top: 74px;
                 right: -100%;
-                width: 260px;
+                width: 270px;
                 height: calc(100vh - 74px);
                 background: var(--white);
                 flex-direction: column;
-                padding: 32px 20px;
-                gap: 4px;
+                padding: 24px 20px;
+                gap: 2px;
                 box-shadow: -4px 0 24px rgba(0,0,0,.08);
                 transition: right var(--transition);
             }
@@ -718,6 +735,8 @@
 
             .hero { min-height: auto; padding: 60px 0; }
 
+            .hero-cards { grid-template-columns: 1fr 1fr 1fr; max-width: 420px; }
+
             .section { padding: 60px 0; }
 
             .about-stats { grid-template-columns: repeat(3, 1fr); gap: 10px; }
@@ -729,9 +748,9 @@
         @media (max-width: 480px) {
             .container { padding: 0 16px; }
 
-            .hero-cards { grid-template-columns: 1fr 1fr; gap: 10px; }
-            .hero-card { padding: 20px 12px; }
-            .hero-card .icon-circle { width: 44px; height: 44px; font-size: 1.2rem; }
+            .hero-cards { grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+            .hero-card { padding: 16px 10px; }
+            .hero-card .icon-circle { width: 40px; height: 40px; font-size: 1rem; }
             .hero-buttons .btn { width: 100%; justify-content: center; }
 
             .about-stats { grid-template-columns: repeat(3, 1fr); }
@@ -760,10 +779,11 @@
             <ul class="nav-links" id="navLinks">
                 <li><a href="#hero" class="active">الرئيسية</a></li>
                 <li><a href="#about">من نحن</a></li>
-                <li><a href="#departments">عيادة الأسنان</a></li>
+                <li><a href="#departments">الأسنان</a></li>
+                <li><a href="#departments">الباطنية</a></li>
+                <li><a href="#departments">النساء</a></li>
                 <li><a href="#departments">المختبر</a></li>
-                <li><a href="#hours">أوقات الدوام</a></li>
-                <li><a href="#contact">تواصل معنا</a></li>
+                <li><a href="#contact">تواصل</a></li>
             </ul>
             <button class="hamburger" id="hamburger" aria-label="القائمة">
                 <span></span><span></span><span></span>
@@ -777,15 +797,20 @@
         <div class="container">
             <div class="hero-content">
                 <h1>مركز <span>الخالد</span> الطبي</h1>
-                <p class="tagline">رعاية تبتسم لها الحياة! 🦷</p>
-                <p style="font-weight:600;color:var(--primary);font-size:1.05rem;margin-bottom:6px;">عيادة عرماء لطب وجراحة الفم والأسنان</p>
-                <p style="font-size:.9rem;color:var(--gray-500);margin-bottom:14px;">تحت إشراف الدكتور محمد فهد الرميمه</p>
-                <p>رعاية صحية متكاملة.. عيادة أسنان ومختبرات طبية حديثة تحت سقف واحد، بمعايير عالمية وكوادر متخصصة.</p>
+                <p class="tagline">رعاية تبتسم لها الحياة!</p>
+                <p style="font-weight:600;color:var(--primary);font-size:1.05rem;margin-bottom:4px;">عيادة عرماء لطب وجراحة الفم والأسنان</p>
+                <p style="font-size:.9rem;color:var(--gray-500);margin-bottom:4px;">تحت إشراف الدكتور محمد فهد الرميمه</p>
+                <p style="font-weight:600;color:var(--primary);font-size:.95rem;margin-bottom:4px;">الدكتورة / سماح بارفعة</p>
+                <p style="font-size:.85rem;color:var(--gray-500);margin-bottom:8px;">مقيمة الأمراض الباطنية وأمراض النساء والولادة — بكالوريوس طب وجراحة عامة — عضو هيئة تدريس بجامعة حضرموت</p>
+                <p style="font-weight:600;color:var(--teal);font-size:.95rem;margin-bottom:14px;"><i class="fas fa-plus-circle"></i> عيادة الباطنية — عيادة النساء والتوليد — المختبر الطبي</p>
+                <p>مجمع عيادات متكامل يضم أحدث التخصصات الطبية تحت سقف واحد: طب الأسنان، الباطنية، النساء والولادة، والمختبر الطبي الحديث. رعاية صحية شاملة بمعايير عالمية.</p>
                 <div class="hero-badges">
-                    <span><i class="fas fa-user-md"></i> د. محمد فهد الرميمه</span>
-                    <span><i class="fas fa-flask"></i> مختبر متطور</span>
-                    <span><i class="fas fa-shield-alt"></i> تعقيم كامل</span>
-                    <span><i class="fas fa-clock"></i> مواعيد مرنة</span>
+                    <span><i class="fas fa-tooth"></i> طب الأسنان</span>
+                    <span><i class="fas fa-stethoscope"></i> الباطنية</span>
+                    <span><i class="fas fa-female"></i> النساء والتوليد</span>
+                    <span><i class="fas fa-flask"></i> المختبر الطبي</span>
+                    <span><i class="fas fa-ambulance"></i> طوارئ</span>
+                    <span><i class="fas fa-syringe"></i> د. سماح بارفعة</span>
                 </div>
                 <div class="hero-buttons">
                     <a href="#contact" class="btn btn-primary"><i class="fas fa-calendar-check"></i> احجز موعد في العيادة</a>
@@ -796,7 +821,7 @@
                 <div class="hero-cards">
                     <div class="hero-card">
                         <div class="icon-circle blue"><i class="fas fa-tooth"></i></div>
-                        <span>عيادة الأسنان</span>
+                        <span>طب الأسنان</span>
                         <small>زراعة · تقويم · تجميل</small>
                     </div>
                     <div class="hero-card">
@@ -805,14 +830,24 @@
                         <small>تحاليل · هرمونات · ميكروبيولوجي</small>
                     </div>
                     <div class="hero-card">
-                        <div class="icon-circle teal"><i class="fas fa-x-ray"></i></div>
-                        <span>الأشعة الرقمية</span>
-                        <small>تشخيص دقيق وفوري</small>
+                        <div class="icon-circle blue"><i class="fas fa-stethoscope"></i></div>
+                        <span>الباطنية</span>
+                        <small>تشخيص · أمراض مزمنة</small>
                     </div>
                     <div class="hero-card">
-                        <div class="icon-circle blue"><i class="fas fa-smile"></i></div>
-                        <span>تبييض الأسنان</span>
-                        <small>بأحدث الأجهزة</small>
+                        <div class="icon-circle teal"><i class="fas fa-female"></i></div>
+                        <span>النساء والتوليد</span>
+                        <small>متابعة حمل · سونار</small>
+                    </div>
+                    <div class="hero-card">
+                        <div class="icon-circle teal"><i class="fas fa-syringe"></i></div>
+                        <span>أشعة تلفزيونية</span>
+                        <small>Ultrasound</small>
+                    </div>
+                    <div class="hero-card">
+                        <div class="icon-circle blue"><i class="fas fa-ambulance"></i></div>
+                        <span>طوارئ</span>
+                        <small>حالات الطوارئ على مدار الساعة</small>
                     </div>
                 </div>
             </div>
@@ -823,22 +858,32 @@
     <section class="section about" id="about">
         <div class="container">
             <h2 class="section-title">من نحن</h2>
-            <p class="section-subtitle">عيادة عرماء لطب وجراحة الفم والأسنان — .</p>
+            <p class="section-subtitle">مجمع عيادات متكامل — نخبة من الكوادر الطبية المتخصصة</p>
             <div class="about-grid">
                 <div class="about-text">
-                    <p>مركز الخالد الطبي يضم <strong>عيادة عرماء لطب وجراحة الفم والأسنان</strong> تحت إشراف الدكتور محمد فهد الرميمه، إلى جانب المختبر الطبي الحديث. وجهتك الأولى للرعاية الصحية الشاملة التي تجمع بين أحدث التقنيات في طب الأسنان والتشخيص المخبري الدقيق تحت سقف واحد.</p>
+                    <p>مركز الخالد الطبي مجمع عيادات متكامل يضم <strong>عيادة عرماء لطب وجراحة الفم والأسنان</strong> تحت إشراف الدكتور محمد فهد الرميمه، <strong>عيادة الأمراض الباطنية والنساء والتوليد</strong> تحت إشراف الدكتورة سماح بارفعة — مقيمة الأمراض الباطنية وأمراض النساء والولادة، بكالوريوس طب وجراحة عامة، وعضو هيئة تدريس بجامعة حضرموت — إلى جانب المختبر الطبي الحديث. وجهتك الأولى للرعاية الصحية الشاملة.</p>
                     <p>نؤمن بأهمية التشخيص الدقيق والعلاج المتخصص، لذلك نحرص على توفير أحدث الأجهزة والمعدات الطبية، إلى جانب كادر طبي مؤهل يتمتع بخبرة واسعة في مختلف التخصصات. هدفنا أن تخرج من مركزنا بابتسامة مشرقة واطمئنان كامل على صحتك.</p>
                     <div class="about-stats">
                         <div class="about-stat">
-                     
+                            <div class="num" data-count="15">15+</div>
+                            <div class="label">عاماً من الخبرة</div>
                         </div>
-      
+                        <div class="about-stat">
+                            <div class="num" data-count="10">10K+</div>
+                            <div class="label">مريض وثقوا بنا</div>
+                        </div>
+                        <div class="about-stat">
+                            <div class="num" data-count="5">5+</div>
+                            <div class="label">أطباء استشاريون</div>
+                        </div>
+                    </div>
+                </div>
                 <div class="about-image">
                     <div class="icon-mosaic">
                         <div class="tile"><i class="fas fa-tooth"></i><span>طب الأسنان</span></div>
-                        <div class="tile"><i class="fas fa-flask"></i><span>المختبر</span></div>
-                        <div class="tile"><i class="fas fa-stethoscope"></i><span>تشخيص دقيق</span></div>
-                        <div class="tile"><i class="fas fa-hand-holding-heart"></i><span>رعاية شخصية</span></div>
+                        <div class="tile"><i class="fas fa-stethoscope"></i><span>الباطنية</span></div>
+                        <div class="tile"><i class="fas fa-female"></i><span>النساء والتوليد</span></div>
+                        <div class="tile"><i class="fas fa-user-graduate"></i><span>د. سماح بارفعة</span></div>
                     </div>
                 </div>
             </div>
@@ -849,14 +894,14 @@
     <section class="section departments" id="departments">
         <div class="container">
             <h2 class="section-title">خدماتنا المتكاملة</h2>
-            <p class="section-subtitle">عيادة عرماء لطب وجراحة الفم والأسنان والمختبر الطبي الحديث</p>
+            <p class="section-subtitle">عيادة عرماء لطب وجراحة الفم والأسنان — عيادة الباطنية — عيادة النساء والتوليد — المختبر الطبي</p>
             <div class="dept-grid">
 
                 <!-- Dental Card -->
                 <div class="dept-card dental">
                     <div class="dept-header">
                         <div class="dept-icon dental"><i class="fas fa-tooth"></i></div>
-                        <h3>عيادة عرماء لطب وجراحة الفم والأسنان <small>.</small></h3>
+                        <h3>عيادة عرماء لطب وجراحة الفم والأسنان <small>تحت إشراف د. محمد فهد الرميمه</small></h3>
                     </div>
                     <div class="dept-body">
                         <div class="dept-subsection">
@@ -897,6 +942,116 @@
                                 <li><i class="fas fa-check-circle"></i> أشعة الأسنان الرقمية للتشخيص الدقيق والفوري</li>
                             </ul>
                         </div>
+                    </div>
+                </div>
+
+                <!-- Internal Medicine Card -->
+                <div class="dept-card internal">
+                    <div class="dept-header">
+                        <div class="dept-icon internal"><i class="fas fa-stethoscope"></i></div>
+                        <h3>عيادة الأمراض الباطنية <small>تحت إشراف الدكتورة / سماح بارفعة</small></h3>
+                    </div>
+                    <div class="dept-body">
+                        <div class="dept-subsection">
+                            <h4 class="dept-subtitle"><i class="fas fa-droplet"></i> السكري</h4>
+                            <ul>
+                                <li><i class="fas fa-check-circle"></i> السكر بنوعيه (النوع الأول والثاني)</li>
+                                <li><i class="fas fa-check-circle"></i> متابعة سكر الحوامل</li>
+                            </ul>
+                        </div>
+                        <div class="dept-subsection">
+                            <h4 class="dept-subtitle"><i class="fas fa-heartbeat"></i> الضغط والقلب</h4>
+                            <ul>
+                                <li><i class="fas fa-check-circle"></i> ارتفاع ضغط الدم الأساسي والهرموني</li>
+                                <li><i class="fas fa-check-circle"></i> أمراض القلب والجهاز التنفسي</li>
+                            </ul>
+                        </div>
+                        <div class="dept-subsection">
+                            <h4 class="dept-subtitle"><i class="fas fa-stomach"></i> الجهاز الهضمي والكبد</h4>
+                            <ul>
+                                <li><i class="fas fa-check-circle"></i> أمراض الجهاز الهضمي والكبد</li>
+                            </ul>
+                        </div>
+                        <div class="dept-subsection">
+                            <h4 class="dept-subtitle"><i class="fas fa-oil-can"></i> الكوليسترول والدهون</h4>
+                            <ul>
+                                <li><i class="fas fa-check-circle"></i> ارتفاع الكوليسترول والدهون الثلاثية</li>
+                            </ul>
+                        </div>
+                        <div class="dept-subsection">
+                            <h4 class="dept-subtitle"><i class="fas fa-bolt"></i> الغدد الصماء</h4>
+                            <ul>
+                                <li><i class="fas fa-check-circle"></i> أمراض الغدد الصماء والغدة الدرقية</li>
+                            </ul>
+                        </div>
+                        <div class="dept-subsection">
+                            <h4 class="dept-subtitle"><i class="fas fa-bone"></i> العظام والفيتامينات</h4>
+                            <ul>
+                                <li><i class="fas fa-check-circle"></i> أمراض العظام واضطرابات فيتامين د</li>
+                            </ul>
+                        </div>
+                        <div class="dept-subsection">
+                            <h4 class="dept-subtitle"><i class="fas fa-lungs"></i> الجهاز التنفسي</h4>
+                            <ul>
+                                <li><i class="fas fa-check-circle"></i> أمراض القلب والجهاز التنفسي</li>
+                            </ul>
+                        </div>
+                        <div class="dept-note"><i class="fas fa-star"></i> عيادة الباطنية تشمل التشخيص الدقيق، متابعة الأمراض المزمنة، والرعاية المتكاملة لجميع المرضى.</div>
+                    </div>
+                </div>
+
+                <!-- OB-GYN Card -->
+                <div class="dept-card obgyn">
+                    <div class="dept-header">
+                        <div class="dept-icon obgyn"><i class="fas fa-female"></i></div>
+                        <h3>عيادة النساء والتوليد <small>تحت إشراف الدكتورة / سماح بارفعة</small></h3>
+                    </div>
+                    <div class="dept-body">
+                        <div class="dept-subsection">
+                            <h4 class="dept-subtitle"><i class="fas fa-hand-holding-heart"></i> تنظيم الأسرة</h4>
+                            <ul>
+                                <li><i class="fas fa-check-circle"></i> تركيب لولب (IUD)</li>
+                                <li><i class="fas fa-check-circle"></i> غرسة منع الحمل</li>
+                                <li><i class="fas fa-check-circle"></i> ربط أنابيب</li>
+                            </ul>
+                        </div>
+                        <div class="dept-subsection">
+                            <h4 class="dept-subtitle"><i class="fas fa-baby"></i> متابعة الحمل</h4>
+                            <ul>
+                                <li><i class="fas fa-check-circle"></i> متابعة حالات الحمل ومعرفة جنس الجنين في الأشهر الأولى</li>
+                                <li><i class="fas fa-check-circle"></i> متابعة الحمل الطبيعي والحمل عالي الخطورة (سكري، أمراض القلب، ارتفاع الضغط)</li>
+                                <li><i class="fas fa-check-circle"></i> التعامل مع حالات الحمل خارج الرحم والحمل العنقودي</li>
+                            </ul>
+                        </div>
+                        <div class="dept-subsection">
+                            <h4 class="dept-subtitle"><i class="fas fa-exclamation-triangle"></i> حالات الإسقاط والأجنة</h4>
+                            <ul>
+                                <li><i class="fas fa-check-circle"></i> حالات الإسقاط (الإجهاض) المتكرر</li>
+                                <li><i class="fas fa-check-circle"></i> وفاة الأجنة المتكررة — تشخيص ومتابعة</li>
+                            </ul>
+                        </div>
+                        <div class="dept-subsection">
+                            <h4 class="dept-subtitle"><i class="fas fa-dna"></i> العقم</h4>
+                            <ul>
+                                <li><i class="fas fa-check-circle"></i> تشخيص ومتابعة حالات العقم عند النساء</li>
+                            </ul>
+                        </div>
+                        <div class="dept-subsection">
+                            <h4 class="dept-subtitle"><i class="fas fa-ambulance"></i> الطوارئ</h4>
+                            <ul>
+                                <li><i class="fas fa-check-circle"></i> التوليد (حالات الولادة الطارئة)</li>
+                                <li><i class="fas fa-check-circle"></i> النزيف أثناء الحمل</li>
+                                <li><i class="fas fa-check-circle"></i> العمليات الجراحية الطارئة</li>
+                            </ul>
+                        </div>
+                        <div class="dept-subsection">
+                            <h4 class="dept-subtitle"><i class="fas fa-wave-square"></i> التشخيص</h4>
+                            <ul>
+                                <li><i class="fas fa-check-circle"></i> أشعة تلفزيونية (السونار — Ultrasound)</li>
+                                <li><i class="fas fa-check-circle"></i> متابعة صحة المرأة من خلال الفحوصات الدورية</li>
+                            </ul>
+                        </div>
+                        <div class="dept-note"><i class="fas fa-star"></i> عيادة النساء والتوليد تشمل متابعة الحمل، تنظيم الأسرة، حالات الطوارئ، والعناية بصحة المرأة تحت إشراف د. سماح بارفعة.</div>
                     </div>
                 </div>
 
@@ -1007,6 +1162,8 @@
                             <select name="department" required>
                                 <option value="">-- اختر القسم --</option>
                                 <option value="dental">عيادة الأسنان</option>
+                                <option value="internal">عيادة الباطنية</option>
+                                <option value="obgyn">عيادة النساء والولادة</option>
                                 <option value="lab">المختبر الطبي</option>
                             </select>
                         </div>
